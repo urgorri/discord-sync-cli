@@ -1,158 +1,210 @@
 # discord-sync-cli
 
-[![CI](https://github.com/your-username/discord-sync-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/your-username/discord-sync-cli/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Node Version](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)](package.json)
+[![Tests](https://img.shields.io/badge/tests-passing-brightgreen.svg)](tests/)
 
-An ultra-lightweight, modular CLI tool to declaratively synchronize and back up Discord server state, roles, categories, channels, and permissions using local JSON files (`server.json`).
+A lightweight, native CLI tool to export, manage, and synchronize Discord server structures (roles, categories, channels, permissions, and initial messages) declaratively using local JSON configuration files (`server.json`).
+
+Treat your Discord server structure as **Infrastructure as Code** (IaC).
 
 ---
 
 ## Table of Contents
 
 - [Features](#features)
-- [Discord Bot Setup Guide](#discord-bot-setup-guide)
+- [Quick Start](#quick-start)
+  - [Option 1: Direct in Project Root (Recommended)](#option-1-direct-in-project-root-recommended)
+  - [Option 2: Global CLI Installation (Optional)](#option-2-global-cli-installation-optional)
+- [Discord Bot Setup](#discord-bot-setup)
   - [1. Create Application & Bot](#1-create-application--bot)
-  - [2. Configure Gateway Intents](#2-configure-gateway-intents)
-  - [3. Invite Bot to Server](#3-invite-bot-to-server)
+  - [2. Enable Gateway Intents](#2-enable-gateway-intents)
+  - [3. Invite Bot with Administrator Permissions](#3-invite-bot-with-administrator-permissions)
   - [4. Role Hierarchy Warning](#4-role-hierarchy-warning)
-- [Installation](#installation)
 - [Environment Configuration](#environment-configuration)
-- [Usage & Commands](#usage--commands)
-  - [`pull` Command](#pull-command)
-  - [`push` Command](#push-command)
+- [CLI Commands & Options](#cli-commands--options)
+  - [`pull` — Export Server Configuration](#pull--export-server-configuration)
+  - [`push` — Apply Server Configuration](#push--apply-server-configuration)
+- [Configuration Schema (`server.json.example`)](#configuration-schema-serverjsonexample)
 - [Project Architecture](#project-architecture)
 - [Testing](#testing)
-- [Contributing](#contributing)
 - [License](#license)
 
 ---
 
 ## Features
 
-- **ESM Native:** Built on modern ES Modules (`"type": "module"`).
-- **Declarative Sync:** Export and restore server structure (roles, categories, channels, permissions) via a readable `server.json` schema.
-- **Interactive UX:** Built with `chalk`, `ora` spinners, and `@inquirer/prompts` confirmation dialogs to prevent accidental server wipes.
-- **Zero Heavy Test Frameworks:** Uses Node.js native test runner (`node:test` and `node:assert`).
-- **Credential Leak Protection:** Strict `.gitignore` policy preventing `.env` and `server.json` from accidentally leaking sensitive data.
+- **🚀 Native & Ultra-Lightweight:** Zero dependencies on unmaintained third-party backup libraries. Pure modern `discord.js` v14 and Node.js built-ins.
+- **📄 Declarative Synchronization:** Export existing server architecture or define a new one from scratch using clean, human-readable JSON files.
+- **🛡️ Safe & Interactive UX:** Clear color-coded terminal output (`chalk`), active status spinners (`ora`), and interactive confirmation prompts (`@inquirer/prompts`) before executing destructive changes.
+- **💬 Messages & Embeds Support:** Prepopulate channels with initial pinned or regular welcome messages, announcement embeds, and banners with custom webhook identities.
+- **🔒 Security-First:** Strict `.gitignore` policy ensuring tokens, guild IDs, and private backups never get committed to source control.
+- **⚡ Native Test Suite:** 100% native unit tests powered by Node's built-in `node:test` runner.
 
 ---
 
-## Discord Bot Setup Guide
+## Quick Start
 
-To use `discord-sync-cli`, you need a Discord Bot with administrative permissions added to your server.
-
-### 1. Create Application & Bot
-1. Go to the [Discord Developer Portal](https://discord.com/developers/applications).
-2. Click **New Application**, enter a name (e.g., `Discord Sync`), and confirm.
-3. Navigate to the **Bot** tab on the left menu.
-4. Click **Reset Token** to generate a new bot token. Copy and save this token (you will set it as `DISCORD_BOT_TOKEN`).
-
-### 2. Configure Gateway Intents
-On the **Bot** tab in the Developer Portal, scroll down to **Privileged Gateway Intents**:
-- Enable **Server Members Intent** (`GUILD_MEMBERS`).
-
-### 3. Invite Bot to Server
-1. Navigate to **OAuth2** > **URL Generator**.
-2. Under **Scopes**, select `bot`.
-3. Under **Bot Permissions**, select **Administrator** (or explicitly grant `Manage Roles`, `Manage Channels`, `Manage Webhooks`, `View Channels`).
-4. Copy the generated URL at the bottom, paste it into your browser, and invite the bot to your target Discord server.
-
-### 4. Role Hierarchy Warning
-> **IMPORTANT:** In Discord, a bot can only manage roles and channels that are **BELOW** its highest assigned role in the server settings.
-> 
-> Go to **Server Settings** > **Roles** and drag your Bot's role to the **very top of the role list**. If the bot's role is below other roles, `discord-sync push` will fail with permission errors (HTTP 403 / Missing Permissions).
-
----
-
-## Installation
-
-### Local / Global Installation
-
-Clone the repository and install dependencies:
+### 1. Clone & Install Dependencies
 
 ```bash
-git clone https://github.com/your-username/discord-sync-cli.git
+git clone https://github.com/urgorri/discord-sync-cli.git
 cd discord-sync-cli
 npm install
 ```
 
-To use `discord-sync` globally on your machine:
+### 2. Configure Credentials
 
-```bash
-npm link
-```
-
-Now you can run `discord-sync` from anywhere in your terminal.
-
----
-
-## Environment Configuration
-
-Create a `.env` file in your working directory (or project root) based on `.env.example`:
+Create a `.env` file in the root directory:
 
 ```bash
 cp .env.example .env
 ```
 
-Configure the following environment variables:
+Fill in your bot token and target server ID:
 
 ```env
-# Required: Your Discord Bot Token from Developer Portal
 DISCORD_BOT_TOKEN=your_bot_token_here
-
-# Required: Target Server (Guild) ID
 DISCORD_GUILD_ID=123456789012345678
-
-# Optional: Output/Input file path (defaults to ./server.json)
-BACKUP_FILE=./server.json
 ```
-
-To find your **Guild ID** in Discord:
-Enable Developer Mode in Discord settings (**User Settings** > **Advanced** > **Developer Mode**), right-click your server icon, and select **Copy Server ID**.
 
 ---
 
-## Usage & Commands
+### Option 1: Direct in Project Root (Recommended)
 
-### `pull` Command
-
-Exports roles, channels, categories, permissions, and server settings to a JSON file.
+Run the predefined npm scripts directly inside the repository without any global installation:
 
 ```bash
-# Export to default server.json
+# Export the current server state to server.json
+npm run pull
+
+# Apply and sync server.json to the Discord server
+npm run push
+
+# Skip confirmation prompt when pushing
+npm run push -- -y
+
+# Alternatively, pass arguments through npm run dev
+npm run dev -- pull -o ./my-backup.json
+npm run dev -- push -f ./my-backup.json -y
+```
+
+---
+
+### Option 2: Global CLI Installation (Optional)
+
+If you prefer to run `discord-sync` from anywhere across your system:
+
+```bash
+# Link globally
+npm link
+
+# Or install globally from source
+npm install -g .
+```
+
+Now you can invoke `discord-sync` directly:
+
+```bash
+# Pull server structure
 discord-sync pull
 
-# Export to custom path
-discord-sync pull -o ./backups/my-server.json
+# Push server structure
+discord-sync push
 ```
-
-**Options:**
-- `-o, --output <path>`: Path where the output JSON will be written (default: `./server.json` or `BACKUP_FILE`).
 
 ---
 
-### `push` Command
+## Discord Bot Setup
 
-Loads the local JSON configuration and applies it to the target Discord server.
-**Note:** By default, restore mode clears existing channels and roles before re-creating them (`clearGuildBeforeRestore: true`).
+To manage roles, channels, and permissions, your Discord bot requires administrative access.
+
+### 1. Create Application & Bot
+1. Open the [Discord Developer Portal](https://discord.com/developers/applications).
+2. Click **New Application**, give it a name, and go to the **Bot** section.
+3. Click **Reset Token** and copy the generated token into your `.env` as `DISCORD_BOT_TOKEN`.
+
+### 2. Enable Gateway Intents
+On the **Bot** page, scroll down to **Privileged Gateway Intents** and enable:
+- **Server Members Intent** (`GUILD_MEMBERS`)
+
+### 3. Invite Bot with Administrator Permissions
+1. Navigate to **OAuth2** > **URL Generator**.
+2. Under **Scopes**, select `bot`.
+3. Under **Bot Permissions**, select **Administrator**.
+4. Open the generated invite URL in your browser and select your Discord server.
+
+### 4. Role Hierarchy Warning
+> [!IMPORTANT]
+> In Discord, a bot can only manage roles and channels that are positioned **BELOW** its highest assigned role.
+>
+> Go to **Server Settings** > **Roles** and drag your Bot's role to the **top of the role list**. If other custom roles are above the bot's role, Discord API will reject modifications with a `403 Missing Permissions` error.
+
+---
+
+## Environment Configuration
+
+| Variable | Description | Required | Default |
+| :--- | :--- | :---: | :--- |
+| `DISCORD_BOT_TOKEN` | Discord Bot Token from Developer Portal | **Yes** | — |
+| `DISCORD_GUILD_ID` | Snowflake ID of the target server | **Yes** | — |
+| `BACKUP_FILE` | Default path for the configuration file | No | `./server.json` |
+
+---
+
+## CLI Commands & Options
+
+### `pull` — Export Server Configuration
+
+Exports roles, categories, channels, permissions, AFK channel, and widget settings into a local JSON file.
 
 ```bash
-# Push with interactive confirmation
-discord-sync push
+# Default export to ./server.json
+npm run pull
 
-# Push with custom file
-discord-sync push -f ./backups/my-server.json
-
-# Skip interactive confirmation prompt
-discord-sync push --yes
-# or
-discord-sync push --force
+# Custom output destination
+npm run dev -- pull -o ./backups/community.json
 ```
 
 **Options:**
-- `-f, --file <path>`: Input JSON configuration path (default: `./server.json` or `BACKUP_FILE`).
-- `-y, --yes`, `--force`: Bypasses interactive confirmation.
+- `-o, --output <path>`: Destination path for the generated JSON file (default: `./server.json` or `BACKUP_FILE`).
+
+---
+
+### `push` — Apply Server Configuration
+
+Reads the local JSON file and recreates/synchronizes the server structure on Discord.
+
+```bash
+# Interactive restore (asks for confirmation)
+npm run push
+
+# Non-interactive force restore
+npm run push -- -y
+
+# Specify a custom file
+npm run dev -- push -f ./server.json.example --yes
+```
+
+**Options:**
+- `-f, --file <path>`: Source configuration file (default: `./server.json` or `BACKUP_FILE`).
+- `-y, --yes`, `--force`: Bypasses the confirmation prompt.
+
+---
+
+## Configuration Schema (`server.json.example`)
+
+A complete, self-documenting reference template is available in [`server.json.example`](server.json.example). It showcases:
+
+- **Server Info**: Server name, AFK voice room with timeout, and widget configuration.
+- **Roles**: `@everyone` base permissions, custom hoisted roles, hex colors (`#3498db`), and permission bitfields.
+- **Categories & Channels**:
+  - `type: 0` (Text channels)
+  - `type: 2` (Voice channels)
+  - `type: 5` (Announcement channels, `isNews: true`)
+  - Topic descriptions, NSFW flags, and slowmode (`rateLimitPerUser`).
+- **Permission Overwrites**: Role-based allows and denies mapped by `roleName`.
+- **Predefined Messages & Embeds**: Standard chat text with pinned messages (`pinned: true`), custom author identities via webhooks, and Rich Embed cards with banners (`image.url`).
 
 ---
 
@@ -160,58 +212,46 @@ discord-sync push --force
 
 ```text
 discord-sync-cli/
-├── .github/
-│   └── workflows/
-│       └── ci.yml            # GitHub Actions CI matrix (Node 18, 20, 22)
 ├── bin/
-│   └── cli.js                # Executable CLI entry point (Commander)
+│   └── cli.js                # CLI command definition & argument parser (Commander)
 ├── src/
 │   ├── commands/
-│   │   ├── pull.js           # Pull command handler
-│   │   └── push.js           # Push command handler with error tips
+│   │   ├── pull.js           # Export command workflow
+│   │   └── push.js           # Restore command workflow
 │   ├── config/
-│   │   └── env.js            # Environment loader & validator
+│   │   └── env.js            # Environment loader & validation
+│   ├── services/
+│   │   └── syncEngine.js     # Core native sync engine (export & restore)
 │   └── utils/
-│       ├── client.js         # Discord Client & lifecycle helper
-│       ├── logger.js         # Chalk visual logging helper
-│       └── validator.js      # Guild ID & JSON file validator
+│       ├── client.js         # Discord.js client lifecycle & cache hydration
+│       ├── logger.js         # Terminal logging formatting (Chalk)
+│       └── validator.js      # Guild ID and JSON schema normalization
 ├── tests/
-│   ├── env.test.js           # Node native unit tests for env config
-│   └── validator.test.js     # Node native unit tests for validators
-├── .env.example              # Example environment variable file
-├── .gitignore                # Security-first ignore file
+│   ├── env.test.js           # Config unit tests
+│   ├── syncEngine.test.js    # Permissions and message restore unit tests
+│   └── validator.test.js     # Schema and snowflake validation unit tests
+├── .env.example              # Environment variables template
+├── .gitignore                # Security-first gitignore
 ├── LICENSE                   # MIT License
-├── package.json              # Package manifest (type: module)
-└── README.md                 # Project documentation
+├── package.json              # Manifest & dependency configuration
+├── README.md                 # Project documentation
+└── server.json.example       # Full declarative reference template
 ```
 
 ---
 
 ## Testing
 
-Run unit tests using the native Node.js test runner (`node:test`):
+Run the native unit test suite:
 
 ```bash
 npm test
 ```
 
-All unit tests run without requiring transpilation or heavy extra test frameworks.
-
----
-
-## Contributing
-
-Contributions are welcome! Please follow these steps:
-
-1. Fork the repository.
-2. Create a feature branch (`git checkout -b feature/amazing-feature`).
-3. Ensure all tests pass (`npm test`).
-4. Commit your changes (`git commit -m 'feat: add amazing feature'`).
-5. Push to the branch (`git push origin feature/amazing-feature`).
-6. Open a Pull Request.
+All 24 unit tests execute in milliseconds with zero third-party testing bloat.
 
 ---
 
 ## License
 
-This project is open-source software licensed under the [MIT License](LICENSE).
+MIT License © 2026 [Gastón Urgorri](https://github.com/urgorri).

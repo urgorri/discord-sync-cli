@@ -1,7 +1,7 @@
 {
   "name": "discord-sync-cli",
   "version": "1.0.0",
-  "description": "A lightweight, modular CLI tool to backup and restore Discord server structure declaratively.",
+  "description": "A lightweight, declarative CLI tool to export, manage, and synchronize Discord server structures.",
   "main": "bin/cli.js",
   "type": "module",
   "bin": {
@@ -9,6 +9,7 @@
   },
   "scripts": {
     "start": "node ./bin/cli.js",
+    "dev": "node ./bin/cli.js",
     "test": "node --test tests/**/*.test.js",
     "pull": "node ./bin/cli.js pull",
     "push": "node ./bin/cli.js push"
@@ -16,13 +17,22 @@
   "keywords": [
     "discord",
     "cli",
-    "discord-backup",
     "discord-sync",
     "discord-bot",
-    "discord-js"
+    "discord-js",
+    "infrastructure-as-code",
+    "declarative-discord"
   ],
-  "author": "",
+  "author": "Gastón Urgorri",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/urgorri/discord-sync-cli.git"
+  },
+  "bugs": {
+    "url": "https://github.com/urgorri/discord-sync-cli/issues"
+  },
+  "homepage": "https://github.com/urgorri/discord-sync-cli#readme",
   "engines": {
     "node": ">=18.0.0"
   },
