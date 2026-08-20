@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { extractChannelPermissions, resolvePermissions, restoreChannelMessages, extractChannelInitialMessages } from '../src/services/syncEngine.js';
+import { extractChannelPermissions, resolvePermissions, restoreChannelMessages, extractChannelInitialMessages, clearChannelMessages } from '../src/services/syncEngine.js';
 
 describe('syncEngine - extractChannelPermissions', () => {
   test('returns empty array when channel has no permissionOverwrites cache', () => {
@@ -172,5 +172,29 @@ describe('syncEngine - extractChannelInitialMessages', () => {
     assert.strictEqual(result[1].username, 'Admin');
     assert.strictEqual(result[1].content, 'Pinned Announcement');
     assert.strictEqual(result[1].pinned, true);
+  });
+});
+
+describe('syncEngine - clearChannelMessages', () => {
+  test('bulk deletes messages when channel supports bulkDelete', async () => {
+    let bulkDeleted = false;
+    const messages = new Map([
+      ['1', { id: '1', deletable: true }],
+      ['2', { id: '2', deletable: true }],
+    ]);
+
+    const channel = {
+      isTextBased: () => true,
+      messages: {
+        fetch: async () => messages,
+      },
+      bulkDelete: async () => {
+        bulkDeleted = true;
+        return messages;
+      },
+    };
+
+    await clearChannelMessages(channel);
+    assert.strictEqual(bulkDeleted, true);
   });
 });

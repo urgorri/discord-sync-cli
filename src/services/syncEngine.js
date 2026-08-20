@@ -315,6 +315,51 @@ export async function clearGuild(guild) {
 }
 
 /**
+ * Purges all existing messages from a text-based channel so it starts clean before restoring messages.
+ *
+ * @param {import('discord.js').TextChannel|import('discord.js').NewsChannel} channel
+ */
+export async function clearChannelMessages(channel) {
+  if (!channel.isTextBased?.() || typeof channel.messages?.fetch !== 'function') return;
+
+  try {
+    let fetched;
+    do {
+      fetched = await channel.messages.fetch({ limit: 100 }).catch(() => null);
+      if (!fetched || (fetched.size === 0 && fetched.length === 0)) break;
+
+      const entries = typeof fetched.values === 'function' ? [...fetched.values()] : Array.isArray(fetched) ? fetched : [];
+      const deletableMessages = entries.filter((m) => m && m.deletable !== false);
+      if (deletableMessages.length === 0) break;
+
+      if (typeof channel.bulkDelete === 'function') {
+        try {
+          const deleted = await channel.bulkDelete(deletableMessages, true);
+          const deletedSet = deleted instanceof Map || deleted?.has ? deleted : new Set(Array.isArray(deleted) ? deleted.map(d => d.id) : []);
+          const remaining = deletableMessages.filter((m) => !deletedSet.has(m.id));
+          for (const msg of remaining) {
+            await msg.delete?.().catch(() => {});
+            await delay(50);
+          }
+        } catch {
+          for (const msg of deletableMessages) {
+            await msg.delete?.().catch(() => {});
+            await delay(50);
+          }
+        }
+      } else {
+        for (const msg of deletableMessages) {
+          await msg.delete?.().catch(() => {});
+          await delay(50);
+        }
+      }
+    } while (fetched && (fetched.size >= 100 || fetched.length >= 100));
+  } catch {
+    // Ignore purge errors
+  }
+}
+
+/**
  * Restores predefined messages to a text-based channel.
  *
  * @param {import('discord.js').TextChannel|import('discord.js').NewsChannel} channel
@@ -322,6 +367,9 @@ export async function clearGuild(guild) {
  */
 export async function restoreChannelMessages(channel, messages) {
   if (!Array.isArray(messages) || messages.length === 0) return;
+
+  // Clear existing messages first so channel starts empty before applying new messages
+  await clearChannelMessages(channel);
 
   for (const msg of messages) {
     if (!msg || (!msg.content && (!Array.isArray(msg.embeds) || msg.embeds.length === 0))) {
@@ -379,7 +427,8 @@ export async function restoreChannelMessages(channel, messages) {
 }
 
 /**
- * Restores a server backup state to a remote Discord guild.
+ * Restores / Synchronizes a server backup state to a remote Discord guild declaratively.
+ * Reuses and edits existing channels and roles to avoid duplication or Discord Community deletion locks.
  *
  * @param {import('discord.js').Guild} guild
  * @param {object} backupData
@@ -387,13 +436,6 @@ export async function restoreChannelMessages(channel, messages) {
  * @param {boolean} [options.clearGuildBeforeRestore=true]
  */
 export async function restoreServerData(guild, backupData, options = {}) {
-  const { clearGuildBeforeRestore = true } = options;
-  let leftoverChannels = [];
-
-  if (clearGuildBeforeRestore) {
-    leftoverChannels = await clearGuild(guild);
-  }
-
   // 1. Restore guild name if present
   if (backupData.name && backupData.name !== guild.name) {
     try {
@@ -403,9 +445,41 @@ export async function restoreServerData(guild, backupData, options = {}) {
     }
   }
 
-  // 2. Restore Roles sequentially
+  // 2. Fetch fresh roles, channels, and member cache
+  await Promise.allSettled([
+    guild.roles.fetch(),
+    guild.channels.fetch(),
+    guild.members.fetchMe(),
+  ]);
+
+  const botMember = guild.members.me || (await guild.members.fetchMe().catch(() => null));
+  const botHighestRole = botMember?.roles?.highest;
+
+  // Delete all non-protected channels initially if clearGuildBeforeRestore is enabled
+  if (options.clearGuildBeforeRestore !== false) {
+    const protectedChannelIds = new Set();
+    if (guild.rulesChannelId) protectedChannelIds.add(guild.rulesChannelId);
+    if (guild.publicUpdatesChannelId) protectedChannelIds.add(guild.publicUpdatesChannelId);
+    if (guild.systemChannelId) protectedChannelIds.add(guild.systemChannelId);
+    if (guild.afkChannelId) protectedChannelIds.add(guild.afkChannelId);
+
+    for (const [, ch] of guild.channels.cache) {
+      if (!protectedChannelIds.has(ch.id) && ch.deletable) {
+        try {
+          await ch.delete();
+          await delay(100);
+        } catch {
+          // Ignore
+        }
+      }
+    }
+    await guild.channels.fetch();
+  }
+
+  // 3. Sync Roles (Reconcile / In-place update + Create + Delete obsolete)
+  const matchedRoleIds = new Set([guild.id]); // Keep @everyone
+
   if (Array.isArray(backupData.roles)) {
-    // Sort so @everyone comes first, then by ascending position
     const sortedRoles = [...backupData.roles].sort((a, b) => {
       if (a.isEveryone || a.name === '@everyone') return -1;
       if (b.isEveryone || b.name === '@everyone') return 1;
@@ -423,30 +497,68 @@ export async function restoreServerData(guild, backupData, options = {}) {
           }
         }
       } else {
-        try {
-          const roleCreateOptions = {
-            name: roleData.name?.slice(0, 100) || 'new-role',
-            hoist: Boolean(roleData.hoist),
-            permissions: roleData.permissions ? BigInt(roleData.permissions) : 0n,
-            mentionable: Boolean(roleData.mentionable),
-          };
+        // Look for existing role by name
+        const existingRole = guild.roles.cache.find(
+          (r) => !r.managed && r.id !== guild.id && r.name.toLowerCase() === roleData.name.toLowerCase()
+        );
 
-          if (roleData.color && roleData.color !== '#000000') {
-            roleCreateOptions.colors = {
-              primaryColor: roleData.color,
+        if (existingRole) {
+          matchedRoleIds.add(existingRole.id);
+          try {
+            const roleEditOptions = {
+              name: roleData.name.slice(0, 100),
+              hoist: Boolean(roleData.hoist),
+              permissions: roleData.permissions ? BigInt(roleData.permissions) : 0n,
+              mentionable: Boolean(roleData.mentionable),
             };
+            if (roleData.color && roleData.color !== '#000000') {
+              roleEditOptions.colors = { primaryColor: roleData.color };
+            }
+            await existingRole.edit(roleEditOptions);
+            await delay(100);
+          } catch {
+            // Continue if edit fails
           }
-
-          await guild.roles.create(roleCreateOptions);
-          await delay(150);
-        } catch {
-          // Continue if single role creation fails
+        } else {
+          try {
+            const roleCreateOptions = {
+              name: roleData.name.slice(0, 100),
+              hoist: Boolean(roleData.hoist),
+              permissions: roleData.permissions ? BigInt(roleData.permissions) : 0n,
+              mentionable: Boolean(roleData.mentionable),
+            };
+            if (roleData.color && roleData.color !== '#000000') {
+              roleCreateOptions.colors = { primaryColor: roleData.color };
+            }
+            const createdRole = await guild.roles.create(roleCreateOptions);
+            matchedRoleIds.add(createdRole.id);
+            await delay(150);
+          } catch {
+            // Continue if create fails
+          }
         }
       }
     }
-    // Refresh roles cache after creation
-    await guild.roles.fetch();
   }
+
+  // Delete obsolete custom roles (if clearGuildBeforeRestore is enabled)
+  if (options.clearGuildBeforeRestore !== false) {
+    for (const [, role] of guild.roles.cache) {
+      if (!matchedRoleIds.has(role.id) && !role.managed && role.id !== guild.id) {
+        try {
+          if (botHighestRole && botHighestRole.comparePositionTo(role) > 0) {
+            await role.delete();
+            await delay(100);
+          }
+        } catch {
+          // Ignore deletion error
+        }
+      }
+    }
+  }
+
+  // Refresh roles cache
+  await guild.roles.fetch();
 
   // Helper to map channel types correctly
   const mapType = (type, isNews) => {
@@ -457,93 +569,186 @@ export async function restoreServerData(guild, backupData, options = {}) {
     return ChannelType.GuildText;
   };
 
-  // 3. Restore Categories and Child Channels
-  if (backupData.channels?.categories) {
+  // 4. Sync Categories & Channels (Reconcile / In-place update + Create)
+  const matchedChannelIds = new Set();
+
+  // Process categories
+  if (Array.isArray(backupData.channels?.categories)) {
     for (const catData of backupData.channels.categories) {
-      let createdCategory = null;
-      try {
-        createdCategory = await guild.channels.create({
-          name: catData.name,
-          type: ChannelType.GuildCategory,
-          permissionOverwrites: resolvePermissions(catData.permissions, guild),
-        });
-        await delay(150);
-      } catch {
-        // Fallback without category
+      let category = guild.channels.cache.find(
+        (ch) => ch.type === ChannelType.GuildCategory && ch.name.toLowerCase() === catData.name.toLowerCase()
+      );
+
+      if (category) {
+        matchedChannelIds.add(category.id);
+        try {
+          await category.edit({
+            name: catData.name,
+            permissionOverwrites: resolvePermissions(catData.permissions, guild),
+          });
+          await delay(100);
+        } catch {
+          // Ignore edit error
+        }
+      } else {
+        try {
+          category = await guild.channels.create({
+            name: catData.name,
+            type: ChannelType.GuildCategory,
+            permissionOverwrites: resolvePermissions(catData.permissions, guild),
+          });
+          matchedChannelIds.add(category.id);
+          await delay(150);
+        } catch {
+          // Ignore category create error
+        }
       }
 
+      // Process children of category
       if (Array.isArray(catData.children)) {
         for (const childData of catData.children) {
-          try {
-            const chType = mapType(childData.type, childData.isNews);
-            const channelOptions = {
-              name: childData.name,
-              type: chType,
-              parent: createdCategory ? createdCategory.id : undefined,
-              permissionOverwrites: resolvePermissions(childData.permissions, guild),
-            };
+          const chType = mapType(childData.type, childData.isNews);
+          let channel = guild.channels.cache.find(
+            (ch) =>
+              !matchedChannelIds.has(ch.id) &&
+              (ch.type === chType || (chType === ChannelType.GuildAnnouncement && ch.type === ChannelType.GuildText) || (chType === ChannelType.GuildText && ch.type === ChannelType.GuildAnnouncement)) &&
+              ch.name.toLowerCase() === childData.name.toLowerCase()
+          );
 
-            if (chType === ChannelType.GuildText || chType === ChannelType.GuildAnnouncement || chType === ChannelType.GuildForum) {
-              if (childData.topic) channelOptions.topic = childData.topic;
-              if (typeof childData.nsfw === 'boolean') channelOptions.nsfw = childData.nsfw;
-              if (childData.rateLimitPerUser) channelOptions.rateLimitPerUser = childData.rateLimitPerUser;
+          if (channel) {
+            matchedChannelIds.add(channel.id);
+            try {
+              const editOptions = {
+                name: childData.name,
+                parent: category ? category.id : undefined,
+                permissionOverwrites: resolvePermissions(childData.permissions, guild),
+              };
+              if (channel.type === ChannelType.GuildText || channel.type === ChannelType.GuildAnnouncement || channel.type === ChannelType.GuildForum) {
+                editOptions.topic = childData.topic || null;
+                editOptions.nsfw = Boolean(childData.nsfw);
+                editOptions.rateLimitPerUser = childData.rateLimitPerUser || 0;
+              }
+              await channel.edit(editOptions);
+              await delay(100);
+            } catch {
+              // Ignore edit error
             }
 
-            const createdChannel = await guild.channels.create(channelOptions);
-            
-            // Restore messages if present
-            if ((chType === ChannelType.GuildText || chType === ChannelType.GuildAnnouncement) && Array.isArray(childData.messages) && childData.messages.length > 0) {
-              await restoreChannelMessages(createdChannel, childData.messages);
+            if ((channel.type === ChannelType.GuildText || channel.type === ChannelType.GuildAnnouncement) && Array.isArray(childData.messages) && childData.messages.length > 0) {
+              await restoreChannelMessages(channel, childData.messages);
             }
+          } else {
+            try {
+              const createOptions = {
+                name: childData.name,
+                type: chType,
+                parent: category ? category.id : undefined,
+                permissionOverwrites: resolvePermissions(childData.permissions, guild),
+              };
+              if (chType === ChannelType.GuildText || chType === ChannelType.GuildAnnouncement || chType === ChannelType.GuildForum) {
+                if (childData.topic) createOptions.topic = childData.topic;
+                if (typeof childData.nsfw === 'boolean') createOptions.nsfw = childData.nsfw;
+                if (childData.rateLimitPerUser) createOptions.rateLimitPerUser = childData.rateLimitPerUser;
+              }
 
-            await delay(150);
-          } catch {
-            // Continue with other channels
+              const createdChannel = await guild.channels.create(createOptions);
+              matchedChannelIds.add(createdChannel.id);
+
+              if ((chType === ChannelType.GuildText || chType === ChannelType.GuildAnnouncement) && Array.isArray(childData.messages) && childData.messages.length > 0) {
+                await restoreChannelMessages(createdChannel, childData.messages);
+              }
+              await delay(150);
+            } catch {
+              // Ignore create error
+            }
           }
         }
       }
     }
   }
 
-  // 4. Restore Other Channels (standalone without category)
+  // Process other standalone channels
   if (Array.isArray(backupData.channels?.others)) {
     for (const otherData of backupData.channels.others) {
-      try {
-        const chType = mapType(otherData.type, otherData.isNews);
-        const channelOptions = {
-          name: otherData.name,
-          type: chType,
-          permissionOverwrites: resolvePermissions(otherData.permissions, guild),
-        };
+      const chType = mapType(otherData.type, otherData.isNews);
+      let channel = guild.channels.cache.find(
+        (ch) =>
+          !matchedChannelIds.has(ch.id) &&
+          (ch.type === chType || (chType === ChannelType.GuildAnnouncement && ch.type === ChannelType.GuildText) || (chType === ChannelType.GuildText && ch.type === ChannelType.GuildAnnouncement)) &&
+          ch.name.toLowerCase() === otherData.name.toLowerCase()
+      );
 
-        if (chType === ChannelType.GuildText || chType === ChannelType.GuildAnnouncement || chType === ChannelType.GuildForum) {
-          if (otherData.topic) channelOptions.topic = otherData.topic;
-          if (typeof otherData.nsfw === 'boolean') channelOptions.nsfw = otherData.nsfw;
-          if (otherData.rateLimitPerUser) channelOptions.rateLimitPerUser = otherData.rateLimitPerUser;
+      if (channel) {
+        matchedChannelIds.add(channel.id);
+        try {
+          const editOptions = {
+            name: otherData.name,
+            parent: null,
+            permissionOverwrites: resolvePermissions(otherData.permissions, guild),
+          };
+          if (channel.type === ChannelType.GuildText || channel.type === ChannelType.GuildAnnouncement || channel.type === ChannelType.GuildForum) {
+            editOptions.topic = otherData.topic || null;
+            editOptions.nsfw = Boolean(otherData.nsfw);
+            editOptions.rateLimitPerUser = otherData.rateLimitPerUser || 0;
+          }
+          await channel.edit(editOptions);
+          await delay(100);
+        } catch {
+          // Ignore edit error
         }
 
-        const createdChannel = await guild.channels.create(channelOptions);
-
-        // Restore messages if present
-        if ((chType === ChannelType.GuildText || chType === ChannelType.GuildAnnouncement) && Array.isArray(otherData.messages) && otherData.messages.length > 0) {
-          await restoreChannelMessages(createdChannel, otherData.messages);
+        if ((channel.type === ChannelType.GuildText || channel.type === ChannelType.GuildAnnouncement) && Array.isArray(otherData.messages) && otherData.messages.length > 0) {
+          await restoreChannelMessages(channel, otherData.messages);
         }
+      } else {
+        try {
+          const createOptions = {
+            name: otherData.name,
+            type: chType,
+            permissionOverwrites: resolvePermissions(otherData.permissions, guild),
+          };
+          if (chType === ChannelType.GuildText || chType === ChannelType.GuildAnnouncement || chType === ChannelType.GuildForum) {
+            if (otherData.topic) createOptions.topic = otherData.topic;
+            if (typeof otherData.nsfw === 'boolean') createOptions.nsfw = otherData.nsfw;
+            if (otherData.rateLimitPerUser) createOptions.rateLimitPerUser = otherData.rateLimitPerUser;
+          }
 
-        await delay(150);
-      } catch {
-        // Continue with next channel
+          const createdChannel = await guild.channels.create(createOptions);
+          matchedChannelIds.add(createdChannel.id);
+
+          if ((chType === ChannelType.GuildText || chType === ChannelType.GuildAnnouncement) && Array.isArray(otherData.messages) && otherData.messages.length > 0) {
+            await restoreChannelMessages(createdChannel, otherData.messages);
+          }
+          await delay(150);
+        } catch {
+          // Ignore create error
+        }
       }
     }
   }
 
-  // Refresh channels cache
+  // 5. Delete obsolete channels (channels that exist on the server but are not in the backup)
+  if (options.clearGuildBeforeRestore !== false) {
+    for (const [, channel] of guild.channels.cache) {
+      if (!matchedChannelIds.has(channel.id) && channel.deletable) {
+        try {
+          await channel.delete();
+          await delay(100);
+        } catch {
+          // Ignore if channel is locked
+        }
+      }
+    }
+  }
+
+  // 6. Refresh channels cache
   await guild.channels.fetch();
 
-  // 5. Restore AFK channel if configured
+  // 7. Bind AFK channel
   if (backupData.afk && backupData.afk.name) {
     try {
       const afkChannel = guild.channels.cache.find(
-        (ch) => ch.name === backupData.afk.name && ch.type === ChannelType.GuildVoice
+        (ch) => ch.name.toLowerCase() === backupData.afk.name.toLowerCase() && ch.type === ChannelType.GuildVoice
       );
       if (afkChannel) {
         await guild.setAFKChannel(afkChannel.id);
@@ -552,61 +757,62 @@ export async function restoreServerData(guild, backupData, options = {}) {
         }
       }
     } catch {
-      // Ignore AFK configuration errors
+      // Ignore AFK errors
     }
   }
 
-  // 6. Restore Community & System Channels
+  // 8. Bind Community & System channels
   if (backupData.rulesChannel) {
     try {
       const rulesCh = guild.channels.cache.find(
-        (ch) => ch.name === backupData.rulesChannel && (ch.type === ChannelType.GuildText || ch.type === ChannelType.GuildAnnouncement)
+        (ch) => ch.name.toLowerCase() === backupData.rulesChannel.toLowerCase()
       );
       if (rulesCh) {
         await guild.setRulesChannel(rulesCh.id);
       }
     } catch {
-      // Ignore if community feature is disabled or bot lacks permissions
+      // Ignore if community feature is disabled
     }
   }
 
   if (backupData.publicUpdatesChannel) {
     try {
       const updatesCh = guild.channels.cache.find(
-        (ch) => ch.name === backupData.publicUpdatesChannel && (ch.type === ChannelType.GuildText || ch.type === ChannelType.GuildAnnouncement)
+        (ch) => ch.name.toLowerCase() === backupData.publicUpdatesChannel.toLowerCase()
       );
       if (updatesCh) {
         await guild.setPublicUpdatesChannel(updatesCh.id);
       }
     } catch {
-      // Ignore if community feature is disabled or bot lacks permissions
+      // Ignore if community feature is disabled
     }
   }
 
   if (backupData.systemChannel) {
     try {
       const sysCh = guild.channels.cache.find(
-        (ch) => ch.name === backupData.systemChannel && ch.type === ChannelType.GuildText
+        (ch) => ch.name.toLowerCase() === backupData.systemChannel.toLowerCase() && ch.type === ChannelType.GuildText
       );
       if (sysCh) {
         await guild.setSystemChannel(sysCh.id);
       }
     } catch {
-      // Ignore if bot lacks permissions
+      // Ignore error
     }
   }
 
-  // 7. Clean up any leftover community channels that could not be deleted prior to re-binding
-  if (Array.isArray(leftoverChannels) && leftoverChannels.length > 0) {
-    for (const oldChannel of leftoverChannels) {
-      try {
-        await oldChannel.delete();
-        await delay(100);
-      } catch {
-        // Silently ignore if already removed
+  // 9. Final cleanup pass of any leftover obsolete channels that were previously locked
+  if (options.clearGuildBeforeRestore !== false) {
+    for (const [, channel] of guild.channels.cache) {
+      if (!matchedChannelIds.has(channel.id) && channel.deletable) {
+        try {
+          await channel.delete();
+          await delay(100);
+        } catch {
+          // Silently ignore
+        }
       }
     }
-    // Final refresh of channels cache
     await guild.channels.fetch();
   }
 }
