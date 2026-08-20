@@ -103,6 +103,7 @@ export async function pushCommand(options = {}) {
     await restoreServerData(guild, backupData, {
       clearGuildBeforeRestore: true,
       cleanMessages: Boolean(options.cleanMessages || options.purgeMessages),
+      unpinPrevious: Boolean(options.unpinPrevious || options.clearPins),
       includeEmojis: Boolean(options.includeEmojis),
     });
 

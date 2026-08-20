@@ -199,6 +199,7 @@ npm run dev -- push -f ./server.json.example -g 123456789012345678 --yes
 - `-f, --file <path>`: Source configuration file (default: `./server.json` or `BACKUP_FILE`).
 - `-d, --dry-run`: Preview planned changes (created, updated, deleted roles & channels) without modifying Discord.
 - `-c, --clean-messages`: Purge all existing messages in channels before posting new ones (disabled by default; messages are sent as new messages).
+- `-u, --unpin-previous`: Unpin prior pinned messages in channels that have new pinned messages defined in configuration.
 - `-g, --guild <id>`: Target Discord Guild/Server ID (overrides `DISCORD_GUILD_ID`).
 - `-t, --token <token>`: Discord Bot Token (overrides `DISCORD_BOT_TOKEN`).
 - `-y, --yes`, `--force`: Bypasses the confirmation prompt.

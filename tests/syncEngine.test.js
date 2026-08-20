@@ -171,6 +171,31 @@ describe('syncEngine - restoreChannelMessages', () => {
     await restoreChannelMessages(channel, [{ content: 'New message' }], { cleanMessages: true });
     assert.strictEqual(bulkDeleteCalled, true);
   });
+
+  test('unpins prior pinned messages when unpinPrevious is true and new message is pinned', async () => {
+    let unpinCalled = false;
+    const oldPinnedMsg = {
+      id: 'old_pinned_1',
+      unpin: async () => {
+        unpinCalled = true;
+      },
+    };
+
+    const channel = {
+      isTextBased: () => true,
+      client: { user: { username: 'MyBot' } },
+      messages: {
+        fetchPinned: async () => new Map([['old_pinned_1', oldPinnedMsg]]),
+      },
+      send: async () => ({
+        id: 'new_pinned_msg',
+        pin: async () => {},
+      }),
+    };
+
+    await restoreChannelMessages(channel, [{ content: 'New announcement', pinned: true }], { unpinPrevious: true });
+    assert.strictEqual(unpinCalled, true);
+  });
 });
 
 describe('syncEngine - extractChannelInitialMessages', () => {

@@ -31,6 +31,8 @@ program
   .option('-d, --dry-run', 'Preview changes without modifying the Discord server')
   .option('-c, --clean-messages', 'Purge existing channel messages before posting new ones')
   .option('--purge-messages', 'Alias for --clean-messages')
+  .option('-u, --unpin-previous', 'Unpin prior pinned messages in channels that have new pinned messages')
+  .option('--clear-pins', 'Alias for --unpin-previous')
   .option('-y, --yes', 'Skip confirmation prompt and force push')
   .option('--force', 'Alias for --yes')
   .option('--include-emojis', 'Synchronize custom emojis if present in configuration')

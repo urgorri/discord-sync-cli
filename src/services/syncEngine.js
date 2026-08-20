@@ -511,6 +511,7 @@ export async function clearChannelMessages(channel) {
  * @param {Array<object>} messages
  * @param {object} [options]
  * @param {boolean} [options.cleanMessages=false]
+ * @param {boolean} [options.unpinPrevious=false]
  */
 export async function restoreChannelMessages(channel, messages, options = {}) {
   if (!Array.isArray(messages) || messages.length === 0) return;
@@ -518,6 +519,20 @@ export async function restoreChannelMessages(channel, messages, options = {}) {
   // Clear existing messages only if explicitly requested
   if (options.cleanMessages) {
     await clearChannelMessages(channel);
+  } else if (options.unpinPrevious && messages.some((m) => m && m.pinned)) {
+    // Unpin existing pinned messages before posting new pinned ones
+    try {
+      const pinned = await channel.messages?.fetchPinned?.().catch(() => null);
+      if (pinned) {
+        const entries = typeof pinned.values === 'function' ? [...pinned.values()] : Array.isArray(pinned) ? pinned : [];
+        for (const msg of entries) {
+          await msg.unpin?.().catch(() => {});
+          await delay(100);
+        }
+      }
+    } catch {
+      // Ignore unpin errors
+    }
   }
 
   for (const msg of messages) {
@@ -768,6 +783,7 @@ export async function restoreServerData(guild, backupData, options = {}) {
             if ((channel.type === ChannelType.GuildText || channel.type === ChannelType.GuildAnnouncement) && Array.isArray(childData.messages) && childData.messages.length > 0) {
               await restoreChannelMessages(channel, childData.messages, {
                 cleanMessages: Boolean(options.cleanMessages),
+                unpinPrevious: Boolean(options.unpinPrevious),
               });
             }
           } else {
@@ -833,6 +849,7 @@ export async function restoreServerData(guild, backupData, options = {}) {
         if ((channel.type === ChannelType.GuildText || channel.type === ChannelType.GuildAnnouncement) && Array.isArray(otherData.messages) && otherData.messages.length > 0) {
           await restoreChannelMessages(channel, otherData.messages, {
             cleanMessages: Boolean(options.cleanMessages),
+            unpinPrevious: Boolean(options.unpinPrevious),
           });
         }
       } else {
