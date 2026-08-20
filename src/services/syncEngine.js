@@ -349,6 +349,7 @@ export async function restoreServerData(guild, backupData, options = {}) {
   const mapType = (type, isNews) => {
     if (type === ChannelType.GuildVoice || type === 2) return ChannelType.GuildVoice;
     if (type === ChannelType.GuildAnnouncement || type === 5 || isNews) return ChannelType.GuildAnnouncement;
+    if (type === ChannelType.GuildForum || type === 15) return ChannelType.GuildForum;
     if (type === ChannelType.GuildCategory || type === 4) return ChannelType.GuildCategory;
     return ChannelType.GuildText;
   };
@@ -379,7 +380,7 @@ export async function restoreServerData(guild, backupData, options = {}) {
               permissionOverwrites: resolvePermissions(childData.permissions, guild),
             };
 
-            if (chType === ChannelType.GuildText || chType === ChannelType.GuildAnnouncement) {
+            if (chType === ChannelType.GuildText || chType === ChannelType.GuildAnnouncement || chType === ChannelType.GuildForum) {
               if (childData.topic) channelOptions.topic = childData.topic;
               if (typeof childData.nsfw === 'boolean') channelOptions.nsfw = childData.nsfw;
               if (childData.rateLimitPerUser) channelOptions.rateLimitPerUser = childData.rateLimitPerUser;
@@ -412,7 +413,7 @@ export async function restoreServerData(guild, backupData, options = {}) {
           permissionOverwrites: resolvePermissions(otherData.permissions, guild),
         };
 
-        if (chType === ChannelType.GuildText || chType === ChannelType.GuildAnnouncement) {
+        if (chType === ChannelType.GuildText || chType === ChannelType.GuildAnnouncement || chType === ChannelType.GuildForum) {
           if (otherData.topic) channelOptions.topic = otherData.topic;
           if (typeof otherData.nsfw === 'boolean') channelOptions.nsfw = otherData.nsfw;
           if (otherData.rateLimitPerUser) channelOptions.rateLimitPerUser = otherData.rateLimitPerUser;

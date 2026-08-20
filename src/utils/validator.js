@@ -102,11 +102,11 @@ export function normalizeBackupData(raw) {
     data.channels.others = Array.isArray(data.channels.others) ? data.channels.others : [];
   }
 
-  // 5. Ensure channel types are supported (0 = GuildText, 2 = GuildVoice, 5 = GuildAnnouncement)
+  // 5. Ensure channel types are supported (0 = GuildText, 2 = GuildVoice, 5 = GuildAnnouncement, 15 = GuildForum)
   const sanitizeChannel = (ch) => {
     if (!ch || typeof ch !== 'object') return ch;
-    if (ch.type === undefined || ch.type === null || ![0, 2, 5].includes(ch.type)) {
-      ch.type = 0; // Default to text channel for compatibility
+    if (ch.type === undefined || ch.type === null || ![0, 2, 5, 15].includes(ch.type)) {
+      ch.type = ch.isNews ? 5 : 0;
     }
     if (!Array.isArray(ch.permissions)) ch.permissions = [];
     if (!Array.isArray(ch.messages)) ch.messages = [];

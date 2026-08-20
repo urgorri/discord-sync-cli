@@ -95,20 +95,26 @@ describe('normalizeBackupData', () => {
     assert.deepStrictEqual(normalized.channels, { categories: [], others: [] });
   });
 
-  test('sanitizes unsupported channel types to 0 (GuildText)', () => {
+  test('preserves valid channel types and sanitizes unsupported ones', () => {
     const input = {
       channels: {
         categories: [
           {
             name: 'Cat',
-            children: [{ name: 'forum', type: 15 }],
+            children: [
+              { name: 'forum', type: 15 },
+              { name: 'announcement', type: 5 },
+              { name: 'invalid', type: 999 },
+            ],
           },
         ],
         others: [{ name: 'custom', type: null }],
       },
     };
     const normalized = normalizeBackupData(input);
-    assert.strictEqual(normalized.channels.categories[0].children[0].type, 0);
+    assert.strictEqual(normalized.channels.categories[0].children[0].type, 15);
+    assert.strictEqual(normalized.channels.categories[0].children[1].type, 5);
+    assert.strictEqual(normalized.channels.categories[0].children[2].type, 0);
     assert.strictEqual(normalized.channels.others[0].type, 0);
   });
 });
