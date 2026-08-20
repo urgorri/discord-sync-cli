@@ -1,0 +1,9 @@
+node_modules/
+.env
+.env.local
+*.backup
+server.json
+*.log
+.DS_Store
+coverage/
+.nyc_output/

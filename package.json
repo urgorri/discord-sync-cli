@@ -1,0 +1,39 @@
+{
+  "name": "discord-sync-cli",
+  "version": "1.0.0",
+  "description": "A lightweight, modular CLI tool to backup and restore Discord server structure declaratively.",
+  "main": "bin/cli.js",
+  "type": "module",
+  "bin": {
+    "discord-sync": "./bin/cli.js"
+  },
+  "scripts": {
+    "start": "node ./bin/cli.js",
+    "test": "node --test tests/**/*.test.js",
+    "pull": "node ./bin/cli.js pull",
+    "push": "node ./bin/cli.js push"
+  },
+  "keywords": [
+    "discord",
+    "cli",
+    "discord-backup",
+    "discord-sync",
+    "discord-bot",
+    "discord-js"
+  ],
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "@inquirer/prompts": "^7.3.2",
+    "chalk": "^5.4.1",
+    "commander": "^13.1.0",
+    "discord-backup": "^3.0.4",
+    "discord.js": "^14.14.0",
+    "dotenv": "^16.4.7",
+    "node-fetch": "^2.7.0",
+    "ora": "^8.2.0"
+  }
+}
