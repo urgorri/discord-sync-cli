@@ -229,18 +229,25 @@ export async function restoreChannelMessages(channel, messages) {
     try {
       let sentMessage = null;
 
-      if (msg.username && msg.username !== channel.client.user.username) {
+      if (msg.username && msg.username !== channel.client?.user?.username) {
+        const resolvedAvatar =
+          msg.avatar ||
+          msg.avatarURL ||
+          (typeof channel.guild?.iconURL === 'function' ? channel.guild.iconURL({ extension: 'png', size: 256 }) : null) ||
+          (typeof channel.client?.user?.displayAvatarURL === 'function' ? channel.client.user.displayAvatarURL({ extension: 'png', size: 256 }) : null) ||
+          undefined;
+
         try {
           const webhook = await channel.createWebhook({
             name: msg.username.slice(0, 80) || 'SyncBot',
-            avatar: msg.avatar || undefined,
+            avatar: resolvedAvatar,
           });
 
           sentMessage = await webhook.send({
             content: msg.content?.slice(0, 2000) || undefined,
             embeds: Array.isArray(msg.embeds) ? msg.embeds.slice(0, 10) : [],
             username: msg.username.slice(0, 80),
-            avatarURL: msg.avatar,
+            avatarURL: resolvedAvatar,
           });
 
           await webhook.delete().catch(() => {});
