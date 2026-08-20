@@ -67,6 +67,71 @@ export function resolvePermissions(permissionsList, guild) {
 }
 
 /**
+ * Fetches the first message and any pinned messages of a text-based channel for declarative backup.
+ *
+ * @param {import('discord.js').GuildChannel} channel
+ * @returns {Promise<Array<object>>}
+ */
+export async function extractChannelInitialMessages(channel) {
+  if (!channel.isTextBased?.() || typeof channel.messages?.fetch !== 'function') {
+    return [];
+  }
+
+  const collectedMessages = new Map();
+
+  try {
+    // 1. Fetch pinned messages
+    const pinnedMessages = await channel.messages.fetchPinned().catch(() => null);
+    if (pinnedMessages) {
+      for (const [, msg] of pinnedMessages) {
+        if (!msg.system) {
+          collectedMessages.set(msg.id, msg);
+        }
+      }
+    }
+
+    // 2. Fetch the very first message of the channel (oldest message)
+    const oldestMessages = await channel.messages.fetch({ after: '0', limit: 1 }).catch(() => null);
+    if (oldestMessages) {
+      for (const [, msg] of oldestMessages) {
+        if (!msg.system) {
+          collectedMessages.set(msg.id, msg);
+        }
+      }
+    }
+  } catch {
+    // Ignore fetch errors if bot lacks ViewChannel or ReadMessageHistory permissions
+  }
+
+  if (collectedMessages.size === 0) {
+    return [];
+  }
+
+  // Sort chronologically (oldest first)
+  const sorted = [...collectedMessages.values()].sort((a, b) => a.createdTimestamp - b.createdTimestamp);
+
+  return sorted.map((msg) => {
+    const embeds = Array.isArray(msg.embeds)
+      ? msg.embeds.map((embed) => (typeof embed.toJSON === 'function' ? embed.toJSON() : embed))
+      : [];
+
+    const item = {
+      username: msg.author?.username || 'System',
+      pinned: Boolean(msg.pinned),
+      content: msg.content || '',
+      embeds,
+    };
+
+    const avatar = msg.author?.displayAvatarURL?.({ extension: 'png' });
+    if (avatar) {
+      item.avatar = avatar;
+    }
+
+    return item;
+  });
+}
+
+/**
  * Exports the complete structure of a Discord guild to a JSON-serializable object.
  *
  * @param {import('discord.js').Guild} guild
@@ -102,10 +167,14 @@ export async function exportServerData(guild) {
     .sort((a, b) => a.position - b.position);
 
   for (const [, category] of categories) {
-    const children = guild.channels.cache
+    const catChildren = guild.channels.cache
       .filter((ch) => ch.parentId === category.id)
-      .sort((a, b) => a.position - b.position)
-      .map((child) => ({
+      .sort((a, b) => a.position - b.position);
+
+    const children = [];
+    for (const [, child] of catChildren) {
+      const messages = await extractChannelInitialMessages(child);
+      children.push({
         type: child.type,
         name: child.name,
         nsfw: Boolean(child.nsfw),
@@ -113,10 +182,11 @@ export async function exportServerData(guild) {
         parent: category.name,
         topic: child.topic || null,
         permissions: extractChannelPermissions(child),
-        messages: [],
+        messages,
         isNews: child.type === ChannelType.GuildAnnouncement,
         threads: [],
-      }));
+      });
+    }
 
     categoriesData.push({
       name: category.name,
@@ -127,8 +197,11 @@ export async function exportServerData(guild) {
 
   const orphanChannels = guild.channels.cache
     .filter((ch) => !ch.parentId && ch.type !== ChannelType.GuildCategory && !ch.isThread())
-    .sort((a, b) => a.position - b.position)
-    .map((ch) => ({
+    .sort((a, b) => a.position - b.position);
+
+  for (const [, ch] of orphanChannels) {
+    const messages = await extractChannelInitialMessages(ch);
+    othersData.push({
       type: ch.type,
       name: ch.name,
       nsfw: Boolean(ch.nsfw),
@@ -136,12 +209,11 @@ export async function exportServerData(guild) {
       parent: null,
       topic: ch.topic || null,
       permissions: extractChannelPermissions(ch),
-      messages: [],
+      messages,
       isNews: ch.type === ChannelType.GuildAnnouncement,
       threads: [],
-    }));
-
-  othersData.push(...orphanChannels);
+    });
+  }
 
   // 3. AFK Channel
   const afk = guild.afkChannel
@@ -186,19 +258,22 @@ export async function exportServerData(guild) {
  * Clears existing channels and custom roles from the guild.
  *
  * @param {import('discord.js').Guild} guild
+ * @returns {Promise<Array<import('discord.js').GuildChannel>>} Leftover channels that couldn't be deleted initially due to community bindings
  */
 export async function clearGuild(guild) {
-  // 1. Delete all channels
-  await guild.channels.fetch();
-  for (const [, channel] of guild.channels.cache) {
-    try {
-      if (channel.deletable) {
-        await channel.delete();
-        await delay(100);
-      }
-    } catch {
-      // Continue if deletion fails on a specific channel
-    }
+  // 1. Unbind system, AFK, and community channels before deletion
+  await guild.setAFKChannel(null).catch(() => {});
+  await guild.setSystemChannel(null).catch(() => {});
+  if (typeof guild.setWidgetSettings === 'function') {
+    await guild.setWidgetSettings({ enabled: false, channel: null }).catch(() => {});
+  }
+  if (typeof guild.edit === 'function') {
+    await guild.edit({
+      rulesChannel: null,
+      publicUpdatesChannel: null,
+      systemChannel: null,
+      afkChannel: null,
+    }).catch(() => {});
   }
 
   // 2. Delete all non-managed custom roles
@@ -218,6 +293,25 @@ export async function clearGuild(guild) {
       // Continue if deletion fails
     }
   }
+
+  // 3. Delete all channels
+  await guild.channels.fetch();
+  const leftoverChannels = [];
+
+  for (const [, channel] of guild.channels.cache) {
+    try {
+      if (channel.deletable) {
+        await channel.delete();
+        await delay(100);
+      } else {
+        leftoverChannels.push(channel);
+      }
+    } catch {
+      leftoverChannels.push(channel);
+    }
+  }
+
+  return leftoverChannels;
 }
 
 /**
@@ -294,9 +388,10 @@ export async function restoreChannelMessages(channel, messages) {
  */
 export async function restoreServerData(guild, backupData, options = {}) {
   const { clearGuildBeforeRestore = true } = options;
+  let leftoverChannels = [];
 
   if (clearGuildBeforeRestore) {
-    await clearGuild(guild);
+    leftoverChannels = await clearGuild(guild);
   }
 
   // 1. Restore guild name if present
@@ -499,5 +594,19 @@ export async function restoreServerData(guild, backupData, options = {}) {
     } catch {
       // Ignore if bot lacks permissions
     }
+  }
+
+  // 7. Clean up any leftover community channels that could not be deleted prior to re-binding
+  if (Array.isArray(leftoverChannels) && leftoverChannels.length > 0) {
+    for (const oldChannel of leftoverChannels) {
+      try {
+        await oldChannel.delete();
+        await delay(100);
+      } catch {
+        // Silently ignore if already removed
+      }
+    }
+    // Final refresh of channels cache
+    await guild.channels.fetch();
   }
 }

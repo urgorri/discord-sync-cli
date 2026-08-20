@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { extractChannelPermissions, resolvePermissions, restoreChannelMessages } from '../src/services/syncEngine.js';
+import { extractChannelPermissions, resolvePermissions, restoreChannelMessages, extractChannelInitialMessages } from '../src/services/syncEngine.js';
 
 describe('syncEngine - extractChannelPermissions', () => {
   test('returns empty array when channel has no permissionOverwrites cache', () => {
@@ -124,5 +124,53 @@ describe('syncEngine - restoreChannelMessages', () => {
     assert.strictEqual(webhookMessages[0].content, '📜 Reglas del servidor');
     assert.strictEqual(webhookMessages[0].webhookName, 'Reglas');
     assert.strictEqual(webhookDeleted, true);
+  });
+});
+
+describe('syncEngine - extractChannelInitialMessages', () => {
+  test('returns empty array if channel is not text based', async () => {
+    const channel = { isTextBased: () => false };
+    const result = await extractChannelInitialMessages(channel);
+    assert.deepStrictEqual(result, []);
+  });
+
+  test('extracts and deduplicates pinned and oldest messages', async () => {
+    const pinnedMessage = {
+      id: 'msg_pinned_1',
+      createdTimestamp: 1000,
+      author: { username: 'Admin', displayAvatarURL: () => 'https://example.com/avatar.png' },
+      pinned: true,
+      content: 'Pinned Announcement',
+      embeds: [],
+    };
+
+    const firstMessage = {
+      id: 'msg_first_1',
+      createdTimestamp: 500,
+      author: { username: 'Founder', displayAvatarURL: () => 'https://example.com/founder.png' },
+      pinned: false,
+      content: 'First Message Ever',
+      embeds: [{ toJSON: () => ({ title: 'Welcome' }) }],
+    };
+
+    const channel = {
+      isTextBased: () => true,
+      messages: {
+        fetchPinned: async () => new Map([['msg_pinned_1', pinnedMessage]]),
+        fetch: async () => new Map([['msg_first_1', firstMessage]]),
+      },
+    };
+
+    const result = await extractChannelInitialMessages(channel);
+    assert.strictEqual(result.length, 2);
+    // Chronologically sorted: firstMessage (500) before pinnedMessage (1000)
+    assert.strictEqual(result[0].username, 'Founder');
+    assert.strictEqual(result[0].content, 'First Message Ever');
+    assert.strictEqual(result[0].pinned, false);
+    assert.deepStrictEqual(result[0].embeds, [{ title: 'Welcome' }]);
+
+    assert.strictEqual(result[1].username, 'Admin');
+    assert.strictEqual(result[1].content, 'Pinned Announcement');
+    assert.strictEqual(result[1].pinned, true);
   });
 });
