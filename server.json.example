@@ -8,6 +8,9 @@
     "enabled": false,
     "channel": null
   },
+  "rulesChannel": "rules",
+  "publicUpdatesChannel": "announcements",
+  "systemChannel": "welcome",
   "roles": [
     {
       "name": "@everyone",

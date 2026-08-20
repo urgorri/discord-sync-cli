@@ -157,10 +157,18 @@ export async function exportServerData(guild) {
     channel: guild.widgetChannel ? guild.widgetChannel.name : null,
   };
 
+  // 5. Community & System Channels
+  const rulesChannel = guild.rulesChannel?.name || null;
+  const publicUpdatesChannel = guild.publicUpdatesChannel?.name || null;
+  const systemChannel = guild.systemChannel?.name || null;
+
   return {
     name: guild.name,
     afk,
     widget,
+    rulesChannel,
+    publicUpdatesChannel,
+    systemChannel,
     channels: {
       categories: categoriesData,
       others: othersData,
@@ -450,6 +458,46 @@ export async function restoreServerData(guild, backupData, options = {}) {
       }
     } catch {
       // Ignore AFK configuration errors
+    }
+  }
+
+  // 6. Restore Community & System Channels
+  if (backupData.rulesChannel) {
+    try {
+      const rulesCh = guild.channels.cache.find(
+        (ch) => ch.name === backupData.rulesChannel && (ch.type === ChannelType.GuildText || ch.type === ChannelType.GuildAnnouncement)
+      );
+      if (rulesCh) {
+        await guild.setRulesChannel(rulesCh.id);
+      }
+    } catch {
+      // Ignore if community feature is disabled or bot lacks permissions
+    }
+  }
+
+  if (backupData.publicUpdatesChannel) {
+    try {
+      const updatesCh = guild.channels.cache.find(
+        (ch) => ch.name === backupData.publicUpdatesChannel && (ch.type === ChannelType.GuildText || ch.type === ChannelType.GuildAnnouncement)
+      );
+      if (updatesCh) {
+        await guild.setPublicUpdatesChannel(updatesCh.id);
+      }
+    } catch {
+      // Ignore if community feature is disabled or bot lacks permissions
+    }
+  }
+
+  if (backupData.systemChannel) {
+    try {
+      const sysCh = guild.channels.cache.find(
+        (ch) => ch.name === backupData.systemChannel && ch.type === ChannelType.GuildText
+      );
+      if (sysCh) {
+        await guild.setSystemChannel(sysCh.id);
+      }
+    } catch {
+      // Ignore if bot lacks permissions
     }
   }
 }
