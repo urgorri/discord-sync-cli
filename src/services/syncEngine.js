@@ -265,7 +265,9 @@ export async function restoreServerData(guild, backupData, options = {}) {
           };
 
           if (roleData.color && roleData.color !== '#000000') {
-            roleCreateOptions.color = roleData.color;
+            roleCreateOptions.colors = {
+              primaryColor: roleData.color,
+            };
           }
 
           await guild.roles.create(roleCreateOptions);
