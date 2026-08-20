@@ -68,7 +68,7 @@ export async function getGuild(client, guildId) {
 }
 
 /**
- * Destroys the Discord Client session cleanly to prevent CLI process hanging.
+ * Destroys the Discord Client session cleanly to prevent process hanging.
  * 
  * @param {Client} client - Discord Client
  */

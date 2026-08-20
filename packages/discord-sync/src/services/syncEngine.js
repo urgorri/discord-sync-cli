@@ -882,92 +882,100 @@ export async function restoreServerData(guild, backupData, options = {}) {
     }
   }
 
-  // 5. Delete obsolete channels (channels that exist on the server but are not in the backup)
+  // 5. Delete obsolete channels not present in backup
   if (options.clearGuildBeforeRestore !== false) {
-    for (const [, channel] of guild.channels.cache) {
-      if (!matchedChannelIds.has(channel.id) && channel.deletable) {
+    for (const [, ch] of guild.channels.cache) {
+      if (!matchedChannelIds.has(ch.id) && ch.deletable) {
         try {
-          await channel.delete();
+          await ch.delete();
           await delay(100);
         } catch {
-          // Ignore if channel is locked
+          // Ignore deletion error (e.g. active community channels)
         }
       }
     }
   }
 
-  // 6. Refresh channels cache
-  await guild.channels.fetch();
-
-  // 7. Bind AFK channel
-  if (backupData.afk && backupData.afk.name) {
-    try {
-      const afkChannel = guild.channels.cache.find(
-        (ch) => ch.name.toLowerCase() === backupData.afk.name.toLowerCase() && ch.type === ChannelType.GuildVoice
-      );
-      if (afkChannel) {
+  // 6. Restore AFK channel
+  if (backupData.afk?.name) {
+    const afkChannel = guild.channels.cache.find(
+      (c) => c.type === ChannelType.GuildVoice && c.name.toLowerCase() === backupData.afk.name.toLowerCase()
+    );
+    if (afkChannel) {
+      try {
         await guild.setAFKChannel(afkChannel.id);
-        if (typeof backupData.afk.timeout === 'number') {
+        if (backupData.afk.timeout) {
           await guild.setAFKTimeout(backupData.afk.timeout);
         }
+      } catch {
+        // Ignore AFK set error
       }
-    } catch {
-      // Ignore AFK errors
     }
   }
 
-  // 8. Bind Community & System channels
-  if (backupData.rulesChannel) {
-    try {
+  // 7. Restore Community channel bindings
+  try {
+    const editOptions = {};
+
+    if (backupData.rulesChannel) {
       const rulesCh = guild.channels.cache.find(
-        (ch) => ch.name.toLowerCase() === backupData.rulesChannel.toLowerCase()
+        (c) => (c.type === ChannelType.GuildText || c.type === ChannelType.GuildAnnouncement) && c.name.toLowerCase() === backupData.rulesChannel.toLowerCase()
       );
-      if (rulesCh) {
-        await guild.setRulesChannel(rulesCh.id);
-      }
-    } catch {
-      // Ignore if community feature is disabled
+      if (rulesCh) editOptions.rulesChannel = rulesCh.id;
     }
-  }
 
-  if (backupData.publicUpdatesChannel) {
-    try {
+    if (backupData.publicUpdatesChannel) {
       const updatesCh = guild.channels.cache.find(
-        (ch) => ch.name.toLowerCase() === backupData.publicUpdatesChannel.toLowerCase()
+        (c) => (c.type === ChannelType.GuildText || c.type === ChannelType.GuildAnnouncement) && c.name.toLowerCase() === backupData.publicUpdatesChannel.toLowerCase()
       );
-      if (updatesCh) {
-        await guild.setPublicUpdatesChannel(updatesCh.id);
-      }
-    } catch {
-      // Ignore if community feature is disabled
+      if (updatesCh) editOptions.publicUpdatesChannel = updatesCh.id;
     }
+
+    if (backupData.systemChannel) {
+      const systemCh = guild.channels.cache.find(
+        (c) => (c.type === ChannelType.GuildText || c.type === ChannelType.GuildAnnouncement) && c.name.toLowerCase() === backupData.systemChannel.toLowerCase()
+      );
+      if (systemCh) editOptions.systemChannel = systemCh.id;
+    }
+
+    if (Object.keys(editOptions).length > 0 && typeof guild.edit === 'function') {
+      await guild.edit(editOptions);
+    }
+  } catch {
+    // Ignore community channel binding errors
   }
 
-  if (backupData.systemChannel) {
+  // 8. Restore Widget channel
+  if (backupData.widget && typeof guild.setWidgetSettings === 'function') {
     try {
-      const sysCh = guild.channels.cache.find(
-        (ch) => ch.name.toLowerCase() === backupData.systemChannel.toLowerCase() && ch.type === ChannelType.GuildText
-      );
-      if (sysCh) {
-        await guild.setSystemChannel(sysCh.id);
-      }
+      const widgetCh = backupData.widget.channel
+        ? guild.channels.cache.find((c) => c.name.toLowerCase() === backupData.widget.channel.toLowerCase())
+        : null;
+      await guild.setWidgetSettings({
+        enabled: Boolean(backupData.widget.enabled),
+        channel: widgetCh ? widgetCh.id : null,
+      });
     } catch {
-      // Ignore error
+      // Ignore widget set error
     }
   }
 
-  // 9. Final cleanup pass of any leftover obsolete channels that were previously locked
-  if (options.clearGuildBeforeRestore !== false) {
-    for (const [, channel] of guild.channels.cache) {
-      if (!matchedChannelIds.has(channel.id) && channel.deletable) {
+  // 9. Restore Custom Emojis (if provided)
+  if (options.includeEmojis && Array.isArray(backupData.emojis) && backupData.emojis.length > 0 && guild.emojis?.create) {
+    for (const emojiData of backupData.emojis) {
+      if (!emojiData.name || !emojiData.url) continue;
+      const existingEmoji = guild.emojis.cache.find((e) => e.name.toLowerCase() === emojiData.name.toLowerCase());
+      if (!existingEmoji) {
         try {
-          await channel.delete();
-          await delay(100);
+          await guild.emojis.create({
+            attachment: emojiData.url,
+            name: emojiData.name.slice(0, 32),
+          });
+          await delay(200);
         } catch {
-          // Silently ignore
+          // Ignore emoji creation errors
         }
       }
     }
-    await guild.channels.fetch();
   }
 }

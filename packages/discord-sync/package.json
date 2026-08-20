@@ -1,0 +1,37 @@
+{
+  "name": "discord-sync",
+  "version": "1.0.0",
+  "description": "Declarative Discord server state engine to export, manage, and reconcile server structures programmatically.",
+  "main": "./src/index.js",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "scripts": {
+    "test": "node --test"
+  },
+  "keywords": [
+    "discord",
+    "discord-sync",
+    "discord-bot",
+    "discord-js",
+    "infrastructure-as-code",
+    "declarative-discord"
+  ],
+  "author": "Gastón Urgorri",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/urgorri/discord-sync.git"
+  },
+  "bugs": {
+    "url": "https://github.com/urgorri/discord-sync/issues"
+  },
+  "homepage": "https://github.com/urgorri/discord-sync#readme",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "discord.js": "^14.17.0"
+  }
+}

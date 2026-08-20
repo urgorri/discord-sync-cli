@@ -2,8 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import ora from 'ora';
 import { getEnvConfig } from '../config/env.js';
-import { createDiscordClient, getGuild, closeClient } from '../utils/client.js';
-import { exportServerData } from '../services/syncEngine.js';
+import { createDiscordClient, getGuild, closeClient, exportServerData } from 'discord-sync';
 import { logger } from '../utils/logger.js';
 
 /**

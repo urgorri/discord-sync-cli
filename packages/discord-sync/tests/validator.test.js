@@ -3,25 +3,25 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { validateGuildId, validateJsonFile, normalizeBackupData } from '../src/utils/validator.js';
+import { validateGuildId, validateJsonFile, normalizeBackupData } from '../src/index.js';
 
 describe('validateGuildId', () => {
   test('returns true for valid Discord snowflakes (17 to 20 digits)', () => {
-    assert.strictEqual(validateGuildId('12345678901234567'), true); // 17 digits
-    assert.strictEqual(validateGuildId('123456789012345678'), true); // 18 digits
-    assert.strictEqual(validateGuildId('1234567890123456789'), true); // 19 digits
-    assert.strictEqual(validateGuildId('12345678901234567890'), true); // 20 digits
-    assert.strictEqual(validateGuildId(123456789012345678n), true); // BigInt or numeric coerced
+    assert.strictEqual(validateGuildId('12345678901234567'), true);
+    assert.strictEqual(validateGuildId('123456789012345678'), true);
+    assert.strictEqual(validateGuildId('1234567890123456789'), true);
+    assert.strictEqual(validateGuildId('12345678901234567890'), true);
+    assert.strictEqual(validateGuildId(123456789012345678n), true);
   });
 
   test('returns false for invalid inputs', () => {
     assert.strictEqual(validateGuildId(''), false);
     assert.strictEqual(validateGuildId('abc'), false);
-    assert.strictEqual(validateGuildId('12345'), false); // Too short
-    assert.strictEqual(validateGuildId('123456789012345678901'), false); // Too long (21 digits)
+    assert.strictEqual(validateGuildId('12345'), false);
+    assert.strictEqual(validateGuildId('123456789012345678901'), false);
     assert.strictEqual(validateGuildId(null), false);
     assert.strictEqual(validateGuildId(undefined), false);
-    assert.strictEqual(validateGuildId('12345678901234567a'), false); // Non-digit characters
+    assert.strictEqual(validateGuildId('12345678901234567a'), false);
   });
 });
 

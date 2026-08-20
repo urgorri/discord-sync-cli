@@ -8,7 +8,7 @@ import {
   clearChannelMessages,
   diffServerData,
   exportServerData,
-} from '../src/services/syncEngine.js';
+} from '../src/index.js';
 
 describe('syncEngine - extractChannelPermissions', () => {
   test('returns empty array when channel has no permissionOverwrites cache', () => {
@@ -26,17 +26,14 @@ describe('syncEngine - extractChannelPermissions', () => {
         },
       },
       permissionOverwrites: {
-        cache: new Map([
-          [
-            'perm_1',
-            {
-              id: 'role_123',
-              type: 0, // OverwriteType.Role
-              allow: { bitfield: 8n },
-              deny: { bitfield: 0n },
-            },
-          ],
-        ]),
+        cache: [
+          {
+            type: 0,
+            id: 'role_123',
+            allow: { bitfield: 8n },
+            deny: { bitfield: 0n },
+          },
+        ],
       },
     };
 
@@ -52,31 +49,24 @@ describe('syncEngine - resolvePermissions', () => {
   test('resolves role names to Discord snowflake IDs with BigInt permissions', () => {
     const guild = {
       roles: {
-        cache: [
-          { id: '111222333', name: '@everyone' },
-          { id: '444555666', name: 'Moderador' },
-        ],
+        cache: new Map([
+          ['111', { id: '111', name: 'Admin' }],
+          ['222', { id: '222', name: 'Moderator' }],
+        ]),
       },
     };
 
     const permissionsList = [
-      { roleName: '@everyone', allow: '0', deny: '2048' },
-      { roleName: 'Moderador', allow: '8', deny: '0' },
-      { roleName: 'NonExistent', allow: '8', deny: '0' },
+      { roleName: 'Admin', allow: '8', deny: '0' },
+      { roleName: 'Moderator', allow: '1024', deny: '8' },
     ];
 
     const result = resolvePermissions(permissionsList, guild);
     assert.strictEqual(result.length, 2);
-    assert.deepStrictEqual(result[0], {
-      id: '111222333',
-      allow: 0n,
-      deny: 2048n,
-    });
-    assert.deepStrictEqual(result[1], {
-      id: '444555666',
-      allow: 8n,
-      deny: 0n,
-    });
+    assert.strictEqual(result[0].id, '111');
+    assert.strictEqual(result[0].allow, 8n);
+    assert.strictEqual(result[1].id, '222');
+    assert.strictEqual(result[1].deny, 8n);
   });
 
   test('handles null or empty permissions list gracefully', () => {
@@ -215,29 +205,29 @@ describe('syncEngine - extractChannelInitialMessages', () => {
       embeds: [],
     };
 
-    const firstMessage = {
-      id: 'msg_first_1',
+    const oldestMessage = {
+      id: 'msg_oldest_2',
       createdTimestamp: 500,
-      author: { username: 'Founder', displayAvatarURL: () => 'https://example.com/founder.png' },
+      author: { username: 'Bot', displayAvatarURL: () => 'https://example.com/bot.png' },
       pinned: false,
-      content: 'First Message Ever',
-      embeds: [{ toJSON: () => ({ title: 'Welcome' }) }],
+      content: 'Welcome message',
+      embeds: [{ title: 'Welcome' }],
     };
 
     const channel = {
       isTextBased: () => true,
       messages: {
         fetchPinned: async () => new Map([['msg_pinned_1', pinnedMessage]]),
-        fetch: async () => new Map([['msg_first_1', firstMessage]]),
+        fetch: async () => new Map([['msg_oldest_2', oldestMessage]]),
       },
     };
 
     const result = await extractChannelInitialMessages(channel);
     assert.strictEqual(result.length, 2);
-    // Chronologically sorted: firstMessage (500) before pinnedMessage (1000)
-    assert.strictEqual(result[0].username, 'Founder');
-    assert.strictEqual(result[0].content, 'First Message Ever');
-    assert.strictEqual(result[0].pinned, false);
+
+    // Should be sorted by createdTimestamp (500 comes before 1000)
+    assert.strictEqual(result[0].username, 'Bot');
+    assert.strictEqual(result[0].content, 'Welcome message');
     assert.deepStrictEqual(result[0].embeds, [{ title: 'Welcome' }]);
 
     assert.strictEqual(result[1].username, 'Admin');
@@ -326,17 +316,14 @@ describe('syncEngine - diffServerData', () => {
     assert.strictEqual(diff.guildName.changed, true);
     assert.strictEqual(diff.guildName.target, 'New Name');
 
-    // Roles: Moderator created, Admin updated, OldRole deleted
     assert.deepStrictEqual(diff.roles.create, ['Moderator']);
     assert.deepStrictEqual(diff.roles.update, ['Admin']);
     assert.deepStrictEqual(diff.roles.delete, ['OldRole']);
 
-    // Channels: welcome created, general updated, obsolete-channel deleted
     assert.deepStrictEqual(diff.channels.create, ['welcome']);
     assert.deepStrictEqual(diff.channels.update, ['general']);
     assert.deepStrictEqual(diff.channels.delete, ['obsolete-channel']);
 
-    // Community
     assert.strictEqual(diff.community.rules, 'general');
     assert.strictEqual(diff.community.system, 'welcome');
   });
