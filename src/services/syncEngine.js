@@ -551,8 +551,9 @@ export async function restoreChannelMessages(channel, messages, options = {}) {
           (typeof channel.client?.user?.displayAvatarURL === 'function' ? channel.client.user.displayAvatarURL({ extension: 'png', size: 256 }) : null) ||
           undefined;
 
+        let webhook = null;
         try {
-          const webhook = await channel.createWebhook({
+          webhook = await channel.createWebhook({
             name: msg.username.slice(0, 80) || 'SyncBot',
             avatar: resolvedAvatar,
           });
@@ -563,14 +564,16 @@ export async function restoreChannelMessages(channel, messages, options = {}) {
             username: msg.username.slice(0, 80),
             avatarURL: resolvedAvatar,
           });
-
-          await webhook.delete().catch(() => {});
         } catch {
-          // If webhook creation fails, fallback to direct channel message
+          // If webhook creation/send fails, fallback to direct channel message
           sentMessage = await channel.send({
             content: msg.content?.slice(0, 2000) || undefined,
             embeds: Array.isArray(msg.embeds) ? msg.embeds.slice(0, 10) : [],
           });
+        } finally {
+          if (webhook) {
+            await webhook.delete().catch(() => {});
+          }
         }
       } else {
         sentMessage = await channel.send({
