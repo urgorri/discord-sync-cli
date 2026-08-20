@@ -246,7 +246,12 @@ A complete, self-documenting reference template is available in [`server.json.ex
 
 ---
 
-## Project Architecture
+## Project Architecture & Repositories
+
+This project is decoupled into two independent open-source repositories:
+
+1. **Core Library (`discord-sync`)**: Programmatic Node.js engine for bot developers ([GitHub Repo](https://github.com/urgorri/discord-sync) | [NPM Package](https://www.npmjs.com/package/discord-sync)).
+2. **CLI Runner (`discord-sync-cli`)**: Interactive terminal application consuming `discord-sync` ([GitHub Repo](https://github.com/urgorri/discord-sync-cli)).
 
 ```text
 discord-sync-cli/
@@ -258,22 +263,82 @@ discord-sync-cli/
 │   │   └── push.js           # Restore command workflow
 │   ├── config/
 │   │   └── env.js            # Environment loader & validation
-│   ├── services/
-│   │   └── syncEngine.js     # Core native sync engine (export & restore)
 │   └── utils/
-│       ├── client.js         # Discord.js client lifecycle & cache hydration
-│       ├── logger.js         # Terminal logging formatting (Chalk)
-│       └── validator.js      # Guild ID and JSON schema normalization
+│       └── logger.js         # Terminal logging formatting (Chalk)
 ├── tests/
-│   ├── env.test.js           # Config unit tests
-│   ├── syncEngine.test.js    # Permissions and message restore unit tests
-│   └── validator.test.js     # Schema and snowflake validation unit tests
+│   └── env.test.js           # CLI environment configuration tests
 ├── .env.example              # Environment variables template
 ├── .gitignore                # Security-first gitignore
 ├── LICENSE                   # MIT License
-├── package.json              # Manifest & dependency configuration
+├── package.json              # Manifest & dependency configuration (depends on "discord-sync")
 ├── README.md                 # Project documentation
 └── server.json.example       # Full declarative reference template
+```
+
+---
+
+## Publishing to GitHub Packages & NPM
+
+To publish the core library (`discord-sync`) to both **NPM Registry** (`registry.npmjs.org`) and **GitHub Packages** (`npm.pkg.github.com`), follow this configuration guide:
+
+### 1. `package.json` Configuration for GitHub Packages
+
+In the `discord-sync` repository, set the `publishConfig` targeting GitHub's package registry:
+
+```json
+{
+  "name": "@urgorri/discord-sync",
+  "version": "1.0.0",
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/urgorri/discord-sync.git"
+  }
+}
+```
+
+### 2. Manual CLI Publishing to GitHub Packages
+
+1. Create a GitHub Personal Access Token (PAT) with `write:packages` and `read:packages` scopes.
+2. Authenticate to GitHub Registry:
+   ```bash
+   npm login --scope=@urgorri --registry=https://npm.pkg.github.com
+   ```
+3. Publish to GitHub Packages:
+   ```bash
+   npm publish
+   ```
+
+### 3. Automated GitHub Actions Workflow (`.github/workflows/publish-package.yml`)
+
+Add this workflow to automatically publish releases to GitHub Packages:
+
+```yaml
+name: Publish to GitHub Packages
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          registry-url: 'https://npm.pkg.github.com'
+          scope: '@urgorri'
+      - run: npm ci
+      - run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 ```
 
 ---
@@ -286,7 +351,7 @@ Run the native unit test suite:
 npm test
 ```
 
-All 33 unit tests execute in milliseconds with zero third-party testing bloat.
+All unit tests execute in milliseconds with zero third-party testing bloat.
 
 ---
 
