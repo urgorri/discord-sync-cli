@@ -1,7 +1,7 @@
 # discord-sync
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![NPM Version](https://img.shields.io/badge/npm-v1.0.0-blue.svg)](https://www.npmjs.com/package/discord-sync)
+[![NPM Version](https://img.shields.io/badge/npm-v1.0.1-blue.svg)](https://www.npmjs.com/package/discord-sync)
 [![Node Version](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)](package.json)
 
 Declarative Discord server state engine to export, manage, and reconcile server structures (roles, categories, channels, permissions, and initial messages) programmatically in Node.js applications.
