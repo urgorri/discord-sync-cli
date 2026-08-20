@@ -15,16 +15,25 @@ program
   .command('pull')
   .description('Export roles, channels, categories, permissions, and server configuration to a JSON file')
   .option('-o, --output <path>', 'Output JSON file path (default: server.json)')
+  .option('-g, --guild <id>', 'Target Discord Guild/Server ID (overrides DISCORD_GUILD_ID)')
+  .option('-t, --token <token>', 'Discord Bot Token (overrides DISCORD_BOT_TOKEN)')
+  .option('--include-emojis', 'Include server custom emojis in export')
   .action(async (options) => {
     await pullCommand(options);
   });
 
 program
   .command('push')
-  .description('Apply local JSON configuration to the remote Discord server (destructive restore)')
+  .description('Apply local JSON configuration to the remote Discord server')
   .option('-f, --file <path>', 'Path to input server.json file')
+  .option('-g, --guild <id>', 'Target Discord Guild/Server ID (overrides DISCORD_GUILD_ID)')
+  .option('-t, --token <token>', 'Discord Bot Token (overrides DISCORD_BOT_TOKEN)')
+  .option('-d, --dry-run', 'Preview changes without modifying the Discord server')
+  .option('-c, --clean-messages', 'Purge existing channel messages before posting new ones')
+  .option('--purge-messages', 'Alias for --clean-messages')
   .option('-y, --yes', 'Skip confirmation prompt and force push')
   .option('--force', 'Alias for --yes')
+  .option('--include-emojis', 'Synchronize custom emojis if present in configuration')
   .action(async (options) => {
     await pushCommand(options);
   });

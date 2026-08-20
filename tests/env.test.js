@@ -41,7 +41,7 @@ describe('getEnvConfig', () => {
 
     assert.throws(
       () => getEnvConfig(),
-      /Missing required environment variable\(s\): DISCORD_BOT_TOKEN/
+      /Missing required configuration: DISCORD_BOT_TOKEN \(--token\)/
     );
   });
 
@@ -50,14 +50,30 @@ describe('getEnvConfig', () => {
 
     assert.throws(
       () => getEnvConfig(),
-      /Missing required environment variable\(s\): DISCORD_GUILD_ID/
+      /Missing required configuration: DISCORD_GUILD_ID \(--guild\)/
     );
   });
 
   test('throws descriptive error listing both missing variables when both are absent', () => {
     assert.throws(
       () => getEnvConfig(),
-      /Missing required environment variable\(s\): DISCORD_BOT_TOKEN, DISCORD_GUILD_ID/
+      /Missing required configuration: DISCORD_BOT_TOKEN \(--token\), DISCORD_GUILD_ID \(--guild\)/
     );
+  });
+
+  test('prioritizes CLI overrides over environment variables', () => {
+    process.env.DISCORD_BOT_TOKEN = 'env_token';
+    process.env.DISCORD_GUILD_ID = 'env_guild';
+    process.env.BACKUP_FILE = './env.json';
+
+    const config = getEnvConfig({
+      token: 'cli_token',
+      guild: 'cli_guild',
+      file: './cli.json',
+    });
+
+    assert.strictEqual(config.botToken, 'cli_token');
+    assert.strictEqual(config.guildId, 'cli_guild');
+    assert.strictEqual(config.backupFile, './cli.json');
   });
 });

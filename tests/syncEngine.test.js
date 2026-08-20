@@ -1,6 +1,14 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { extractChannelPermissions, resolvePermissions, restoreChannelMessages, extractChannelInitialMessages, clearChannelMessages } from '../src/services/syncEngine.js';
+import {
+  extractChannelPermissions,
+  resolvePermissions,
+  restoreChannelMessages,
+  extractChannelInitialMessages,
+  clearChannelMessages,
+  diffServerData,
+  exportServerData,
+} from '../src/services/syncEngine.js';
 
 describe('syncEngine - extractChannelPermissions', () => {
   test('returns empty array when channel has no permissionOverwrites cache', () => {
@@ -125,6 +133,44 @@ describe('syncEngine - restoreChannelMessages', () => {
     assert.strictEqual(webhookMessages[0].webhookName, 'Reglas');
     assert.strictEqual(webhookDeleted, true);
   });
+
+  test('does not purge messages by default (cleanMessages: false)', async () => {
+    let bulkDeleteCalled = false;
+    const channel = {
+      isTextBased: () => true,
+      client: { user: { username: 'MyBot' } },
+      messages: {
+        fetch: async () => new Map([['1', { id: '1', deletable: true }]]),
+      },
+      bulkDelete: async () => {
+        bulkDeleteCalled = true;
+      },
+      send: async () => ({ id: 'new_msg' }),
+    };
+
+    await restoreChannelMessages(channel, [{ content: 'New message' }]);
+    assert.strictEqual(bulkDeleteCalled, false);
+  });
+
+  test('purges messages when cleanMessages is true', async () => {
+    let bulkDeleteCalled = false;
+    const messages = new Map([['1', { id: '1', deletable: true }]]);
+    const channel = {
+      isTextBased: () => true,
+      client: { user: { username: 'MyBot' } },
+      messages: {
+        fetch: async () => messages,
+      },
+      bulkDelete: async () => {
+        bulkDeleteCalled = true;
+        return messages;
+      },
+      send: async () => ({ id: 'new_msg' }),
+    };
+
+    await restoreChannelMessages(channel, [{ content: 'New message' }], { cleanMessages: true });
+    assert.strictEqual(bulkDeleteCalled, true);
+  });
 });
 
 describe('syncEngine - extractChannelInitialMessages', () => {
@@ -196,5 +242,101 @@ describe('syncEngine - clearChannelMessages', () => {
 
     await clearChannelMessages(channel);
     assert.strictEqual(bulkDeleted, true);
+  });
+});
+
+describe('syncEngine - diffServerData', () => {
+  test('correctly identifies created, updated, and deleted entities for dry-run', async () => {
+    const mockGuild = {
+      name: 'Old Name',
+      id: '123456789',
+      channels: {
+        fetch: async () => {},
+        cache: new Map([
+          ['ch_1', { id: 'ch_1', name: 'general', type: 0, deletable: true }],
+          ['ch_2', { id: 'ch_2', name: 'obsolete-channel', type: 0, deletable: true }],
+        ]),
+      },
+      roles: {
+        fetch: async () => {},
+        cache: new Map([
+          ['123456789', { id: '123456789', name: '@everyone', managed: false }],
+          ['r_1', { id: 'r_1', name: 'Admin', managed: false }],
+          ['r_2', { id: 'r_2', name: 'OldRole', managed: false }],
+        ]),
+      },
+      members: {
+        fetchMe: async () => ({
+          roles: {
+            highest: {
+              comparePositionTo: () => 1,
+            },
+          },
+        }),
+      },
+    };
+
+    const backupData = {
+      name: 'New Name',
+      roles: [
+        { name: '@everyone' },
+        { name: 'Admin' },
+        { name: 'Moderator' },
+      ],
+      channels: {
+        categories: [],
+        others: [
+          { name: 'general', type: 0 },
+          { name: 'welcome', type: 0 },
+        ],
+      },
+      rulesChannel: 'general',
+      publicUpdatesChannel: null,
+      systemChannel: 'welcome',
+      afk: { name: 'AFK', timeout: 300 },
+    };
+
+    const diff = await diffServerData(mockGuild, backupData);
+
+    assert.strictEqual(diff.guildName.changed, true);
+    assert.strictEqual(diff.guildName.target, 'New Name');
+
+    // Roles: Moderator created, Admin updated, OldRole deleted
+    assert.deepStrictEqual(diff.roles.create, ['Moderator']);
+    assert.deepStrictEqual(diff.roles.update, ['Admin']);
+    assert.deepStrictEqual(diff.roles.delete, ['OldRole']);
+
+    // Channels: welcome created, general updated, obsolete-channel deleted
+    assert.deepStrictEqual(diff.channels.create, ['welcome']);
+    assert.deepStrictEqual(diff.channels.update, ['general']);
+    assert.deepStrictEqual(diff.channels.delete, ['obsolete-channel']);
+
+    // Community
+    assert.strictEqual(diff.community.rules, 'general');
+    assert.strictEqual(diff.community.system, 'welcome');
+  });
+});
+
+describe('syncEngine - exportServerData', () => {
+  test('exports emojis when includeEmojis is true', async () => {
+    const mockGuild = {
+      id: '123456789',
+      name: 'Emoji Guild',
+      channels: { fetch: async () => {}, cache: new Map() },
+      roles: { fetch: async () => {}, cache: new Map() },
+      emojis: {
+        fetch: async () => {},
+        cache: new Map([
+          ['e_1', { name: 'pepe', imageURL: () => 'https://cdn.discordapp.com/emojis/pepe.png' }],
+        ]),
+      },
+      afkChannel: null,
+      widgetEnabled: false,
+    };
+
+    const data = await exportServerData(mockGuild, { includeEmojis: true });
+    assert.strictEqual(data.emojis.length, 1);
+    assert.strictEqual(data.emojis[0].name, 'pepe');
+    assert.strictEqual(data.emojis[0].url, 'https://cdn.discordapp.com/emojis/pepe.png');
   });
 });

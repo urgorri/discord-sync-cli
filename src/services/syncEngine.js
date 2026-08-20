@@ -135,26 +135,30 @@ export async function extractChannelInitialMessages(channel) {
  * Exports the complete structure of a Discord guild to a JSON-serializable object.
  *
  * @param {import('discord.js').Guild} guild
+ * @param {object} [options]
+ * @param {boolean} [options.includeEmojis=false]
  * @returns {Promise<object>}
  */
-export async function exportServerData(guild) {
+export async function exportServerData(guild, options = {}) {
   // Ensure caches are fresh
   await Promise.allSettled([
     guild.channels.fetch(),
     guild.roles.fetch(),
+    options.includeEmojis ? guild.emojis?.fetch().catch(() => null) : Promise.resolve(),
   ]);
 
   // 1. Roles (sorted from lowest position to highest)
-  const roles = guild.roles.cache
-    .filter((role) => !role.managed)
-    .sort((a, b) => a.position - b.position)
+  const rolesCache = typeof guild.roles?.cache?.values === 'function' ? [...guild.roles.cache.values()] : Array.isArray(guild.roles?.cache) ? guild.roles.cache : [];
+  const roles = rolesCache
+    .filter((role) => role && !role.managed)
+    .sort((a, b) => (a.position || 0) - (b.position || 0))
     .map((role) => ({
       name: role.name,
-      color: role.hexColor === '#000000' ? '#000000' : role.hexColor,
-      hoist: role.hoist,
-      permissions: role.permissions.bitfield.toString(),
-      mentionable: role.mentionable,
-      position: role.position,
+      color: role.hexColor === '#000000' || !role.hexColor ? '#000000' : role.hexColor,
+      hoist: Boolean(role.hoist),
+      permissions: role.permissions?.bitfield !== undefined ? role.permissions.bitfield.toString() : (role.permissions || '0').toString(),
+      mentionable: Boolean(role.mentionable),
+      position: role.position || 0,
       isEveryone: role.id === guild.id,
     }));
 
@@ -162,17 +166,19 @@ export async function exportServerData(guild) {
   const categoriesData = [];
   const othersData = [];
 
-  const categories = guild.channels.cache
-    .filter((ch) => ch.type === ChannelType.GuildCategory)
-    .sort((a, b) => a.position - b.position);
+  const allChannels = typeof guild.channels?.cache?.values === 'function' ? [...guild.channels.cache.values()] : Array.isArray(guild.channels?.cache) ? guild.channels.cache : [];
 
-  for (const [, category] of categories) {
-    const catChildren = guild.channels.cache
-      .filter((ch) => ch.parentId === category.id)
-      .sort((a, b) => a.position - b.position);
+  const categories = allChannels
+    .filter((ch) => ch && ch.type === ChannelType.GuildCategory)
+    .sort((a, b) => (a.position || 0) - (b.position || 0));
+
+  for (const category of categories) {
+    const catChildren = allChannels
+      .filter((ch) => ch && ch.parentId === category.id)
+      .sort((a, b) => (a.position || 0) - (b.position || 0));
 
     const children = [];
-    for (const [, child] of catChildren) {
+    for (const child of catChildren) {
       const messages = await extractChannelInitialMessages(child);
       children.push({
         type: child.type,
@@ -195,11 +201,11 @@ export async function exportServerData(guild) {
     });
   }
 
-  const orphanChannels = guild.channels.cache
-    .filter((ch) => !ch.parentId && ch.type !== ChannelType.GuildCategory && !ch.isThread())
-    .sort((a, b) => a.position - b.position);
+  const orphanChannels = allChannels
+    .filter((ch) => ch && !ch.parentId && ch.type !== ChannelType.GuildCategory && (!ch.isThread || !ch.isThread()))
+    .sort((a, b) => (a.position || 0) - (b.position || 0));
 
-  for (const [, ch] of orphanChannels) {
+  for (const ch of orphanChannels) {
     const messages = await extractChannelInitialMessages(ch);
     othersData.push({
       type: ch.type,
@@ -234,6 +240,14 @@ export async function exportServerData(guild) {
   const publicUpdatesChannel = guild.publicUpdatesChannel?.name || null;
   const systemChannel = guild.systemChannel?.name || null;
 
+  // 6. Emojis (if requested)
+  const emojis = options.includeEmojis && guild.emojis?.cache
+    ? [...guild.emojis.cache.values()].map((emoji) => ({
+        name: emoji.name,
+        url: typeof emoji.imageURL === 'function' ? emoji.imageURL({ extension: 'png' }) : emoji.url || null,
+      }))
+    : [];
+
   return {
     name: guild.name,
     afk,
@@ -247,10 +261,141 @@ export async function exportServerData(guild) {
     },
     roles,
     bans: [],
-    emojis: [],
+    emojis,
     members: [],
     createdTimestamp: Date.now(),
     guildID: guild.id,
+  };
+}
+
+/**
+ * Computes the planned declarative differences between the remote Guild and the local backupData without applying any changes.
+ *
+ * @param {import('discord.js').Guild} guild
+ * @param {object} backupData
+ * @param {object} [options]
+ * @returns {Promise<{
+ *   guildName: { current: string, target: string, changed: boolean },
+ *   roles: { create: string[], update: string[], delete: string[] },
+ *   categories: { create: string[], update: string[], delete: string[] },
+ *   channels: { create: string[], update: string[], delete: string[] },
+ *   community: { rules: string|null, publicUpdates: string|null, system: string|null, afk: string|null }
+ * }>}
+ */
+export async function diffServerData(guild, backupData, options = {}) {
+  await Promise.allSettled([
+    guild.channels.fetch(),
+    guild.roles.fetch(),
+    guild.members.fetchMe(),
+  ]);
+
+  const botMember = guild.members.me || (await guild.members.fetchMe().catch(() => null));
+  const botHighestRole = botMember?.roles?.highest;
+
+  // 1. Guild Name
+  const guildName = {
+    current: guild.name,
+    target: backupData.name || guild.name,
+    changed: Boolean(backupData.name && backupData.name !== guild.name),
+  };
+
+  // 2. Roles diff
+  const rolesDiff = { create: [], update: [], delete: [] };
+  const matchedRoleIds = new Set([guild.id]);
+  const rolesList = typeof guild.roles?.cache?.values === 'function' ? [...guild.roles.cache.values()] : Array.isArray(guild.roles?.cache) ? guild.roles.cache : [];
+
+  if (Array.isArray(backupData.roles)) {
+    for (const roleData of backupData.roles) {
+      if (roleData.isEveryone || roleData.name === '@everyone') continue;
+      const existing = rolesList.find(
+        (r) => r && !r.managed && r.id !== guild.id && r.name.toLowerCase() === roleData.name.toLowerCase()
+      );
+      if (existing) {
+        matchedRoleIds.add(existing.id);
+        rolesDiff.update.push(roleData.name);
+      } else {
+        rolesDiff.create.push(roleData.name);
+      }
+    }
+  }
+
+  for (const role of rolesList) {
+    if (role && !matchedRoleIds.has(role.id) && !role.managed && role.id !== guild.id) {
+      if (botHighestRole && botHighestRole.comparePositionTo(role) > 0) {
+        rolesDiff.delete.push(role.name);
+      }
+    }
+  }
+
+  // 3. Categories & Channels diff
+  const categoriesDiff = { create: [], update: [], delete: [] };
+  const channelsDiff = { create: [], update: [], delete: [] };
+  const matchedChannelIds = new Set();
+  const channelsList = typeof guild.channels?.cache?.values === 'function' ? [...guild.channels.cache.values()] : Array.isArray(guild.channels?.cache) ? guild.channels.cache : [];
+
+  if (Array.isArray(backupData.channels?.categories)) {
+    for (const catData of backupData.channels.categories) {
+      const existingCat = channelsList.find(
+        (ch) => ch && ch.type === ChannelType.GuildCategory && ch.name.toLowerCase() === catData.name.toLowerCase()
+      );
+      if (existingCat) {
+        matchedChannelIds.add(existingCat.id);
+        categoriesDiff.update.push(catData.name);
+      } else {
+        categoriesDiff.create.push(catData.name);
+      }
+
+      if (Array.isArray(catData.children)) {
+        for (const child of catData.children) {
+          const existingChild = channelsList.find(
+            (ch) => ch && !matchedChannelIds.has(ch.id) && ch.name.toLowerCase() === child.name.toLowerCase()
+          );
+          if (existingChild) {
+            matchedChannelIds.add(existingChild.id);
+            channelsDiff.update.push(child.name);
+          } else {
+            channelsDiff.create.push(child.name);
+          }
+        }
+      }
+    }
+  }
+
+  if (Array.isArray(backupData.channels?.others)) {
+    for (const other of backupData.channels.others) {
+      const existingOther = channelsList.find(
+        (ch) => ch && !matchedChannelIds.has(ch.id) && ch.name.toLowerCase() === other.name.toLowerCase()
+      );
+      if (existingOther) {
+        matchedChannelIds.add(existingOther.id);
+        channelsDiff.update.push(other.name);
+      } else {
+        channelsDiff.create.push(other.name);
+      }
+    }
+  }
+
+  for (const ch of channelsList) {
+    if (ch && !matchedChannelIds.has(ch.id)) {
+      if (ch.type === ChannelType.GuildCategory) {
+        categoriesDiff.delete.push(ch.name);
+      } else {
+        channelsDiff.delete.push(ch.name);
+      }
+    }
+  }
+
+  return {
+    guildName,
+    roles: rolesDiff,
+    categories: categoriesDiff,
+    channels: channelsDiff,
+    community: {
+      rules: backupData.rulesChannel || null,
+      publicUpdates: backupData.publicUpdatesChannel || null,
+      system: backupData.systemChannel || null,
+      afk: backupData.afk?.name || null,
+    },
   };
 }
 
@@ -364,12 +509,16 @@ export async function clearChannelMessages(channel) {
  *
  * @param {import('discord.js').TextChannel|import('discord.js').NewsChannel} channel
  * @param {Array<object>} messages
+ * @param {object} [options]
+ * @param {boolean} [options.cleanMessages=false]
  */
-export async function restoreChannelMessages(channel, messages) {
+export async function restoreChannelMessages(channel, messages, options = {}) {
   if (!Array.isArray(messages) || messages.length === 0) return;
 
-  // Clear existing messages first so channel starts empty before applying new messages
-  await clearChannelMessages(channel);
+  // Clear existing messages only if explicitly requested
+  if (options.cleanMessages) {
+    await clearChannelMessages(channel);
+  }
 
   for (const msg of messages) {
     if (!msg || (!msg.content && (!Array.isArray(msg.embeds) || msg.embeds.length === 0))) {
@@ -429,11 +578,14 @@ export async function restoreChannelMessages(channel, messages) {
 /**
  * Restores / Synchronizes a server backup state to a remote Discord guild declaratively.
  * Reuses and edits existing channels and roles to avoid duplication or Discord Community deletion locks.
+ * Only deletes channels and roles that are NOT present in the backup configuration.
  *
  * @param {import('discord.js').Guild} guild
  * @param {object} backupData
  * @param {object} [options]
  * @param {boolean} [options.clearGuildBeforeRestore=true]
+ * @param {boolean} [options.cleanMessages=false]
+ * @param {boolean} [options.includeEmojis=false]
  */
 export async function restoreServerData(guild, backupData, options = {}) {
   // 1. Restore guild name if present
@@ -454,27 +606,6 @@ export async function restoreServerData(guild, backupData, options = {}) {
 
   const botMember = guild.members.me || (await guild.members.fetchMe().catch(() => null));
   const botHighestRole = botMember?.roles?.highest;
-
-  // Delete all non-protected channels initially if clearGuildBeforeRestore is enabled
-  if (options.clearGuildBeforeRestore !== false) {
-    const protectedChannelIds = new Set();
-    if (guild.rulesChannelId) protectedChannelIds.add(guild.rulesChannelId);
-    if (guild.publicUpdatesChannelId) protectedChannelIds.add(guild.publicUpdatesChannelId);
-    if (guild.systemChannelId) protectedChannelIds.add(guild.systemChannelId);
-    if (guild.afkChannelId) protectedChannelIds.add(guild.afkChannelId);
-
-    for (const [, ch] of guild.channels.cache) {
-      if (!protectedChannelIds.has(ch.id) && ch.deletable) {
-        try {
-          await ch.delete();
-          await delay(100);
-        } catch {
-          // Ignore
-        }
-      }
-    }
-    await guild.channels.fetch();
-  }
 
   // 3. Sync Roles (Reconcile / In-place update + Create + Delete obsolete)
   const matchedRoleIds = new Set([guild.id]); // Keep @everyone
@@ -635,7 +766,9 @@ export async function restoreServerData(guild, backupData, options = {}) {
             }
 
             if ((channel.type === ChannelType.GuildText || channel.type === ChannelType.GuildAnnouncement) && Array.isArray(childData.messages) && childData.messages.length > 0) {
-              await restoreChannelMessages(channel, childData.messages);
+              await restoreChannelMessages(channel, childData.messages, {
+                cleanMessages: Boolean(options.cleanMessages),
+              });
             }
           } else {
             try {
@@ -698,7 +831,9 @@ export async function restoreServerData(guild, backupData, options = {}) {
         }
 
         if ((channel.type === ChannelType.GuildText || channel.type === ChannelType.GuildAnnouncement) && Array.isArray(otherData.messages) && otherData.messages.length > 0) {
-          await restoreChannelMessages(channel, otherData.messages);
+          await restoreChannelMessages(channel, otherData.messages, {
+            cleanMessages: Boolean(options.cleanMessages),
+          });
         }
       } else {
         try {

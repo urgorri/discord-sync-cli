@@ -13,12 +13,16 @@ import { logger } from '../utils/logger.js';
  * @param {object} options
  * @param {string} [options.output] - Target file path
  */
-export async function pullCommand(options) {
+export async function pullCommand(options = {}) {
   let client = null;
   const spinner = ora();
 
   try {
-    const config = getEnvConfig();
+    const config = getEnvConfig({
+      token: options.token,
+      guild: options.guild,
+      file: options.output,
+    });
     const outputPath = path.resolve(options.output || config.backupFile || './server.json');
 
     spinner.start('Connecting to Discord gateway...');
@@ -28,7 +32,9 @@ export async function pullCommand(options) {
     const guild = await getGuild(client, config.guildId);
 
     spinner.text = `Exporting backup data for guild "${guild.name}"...`;
-    const backupData = await exportServerData(guild);
+    const backupData = await exportServerData(guild, {
+      includeEmojis: Boolean(options.includeEmojis),
+    });
 
     spinner.text = `Writing server configuration to ${outputPath}...`;
     const jsonContent = JSON.stringify(backupData, null, 2);

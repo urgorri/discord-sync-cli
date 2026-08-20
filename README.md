@@ -162,12 +162,18 @@ Exports roles, categories, channels, permissions, AFK channel, and widget settin
 # Default export to ./server.json
 npm run pull
 
-# Custom output destination
-npm run dev -- pull -o ./backups/community.json
+# Custom output destination and guild
+npm run dev -- pull -o ./backups/community.json -g 123456789012345678
+
+# Export custom server emojis as well
+npm run dev -- pull --include-emojis
 ```
 
 **Options:**
 - `-o, --output <path>`: Destination path for the generated JSON file (default: `./server.json` or `BACKUP_FILE`).
+- `-g, --guild <id>`: Target Discord Guild/Server ID (overrides `DISCORD_GUILD_ID`).
+- `-t, --token <token>`: Discord Bot Token (overrides `DISCORD_BOT_TOKEN`).
+- `--include-emojis`: Include custom server emojis in export.
 
 ---
 
@@ -176,19 +182,27 @@ npm run dev -- pull -o ./backups/community.json
 Reads the local JSON file and recreates/synchronizes the server structure on Discord.
 
 ```bash
+# Preview changes before applying (Dry-Run mode)
+npm run dev -- push -d
+
 # Interactive restore (asks for confirmation)
 npm run push
 
 # Non-interactive force restore
 npm run push -- -y
 
-# Specify a custom file
-npm run dev -- push -f ./server.json.example --yes
+# Specify a custom file and guild override
+npm run dev -- push -f ./server.json.example -g 123456789012345678 --yes
 ```
 
 **Options:**
 - `-f, --file <path>`: Source configuration file (default: `./server.json` or `BACKUP_FILE`).
+- `-d, --dry-run`: Preview planned changes (created, updated, deleted roles & channels) without modifying Discord.
+- `-c, --clean-messages`: Purge all existing messages in channels before posting new ones (disabled by default; messages are sent as new messages).
+- `-g, --guild <id>`: Target Discord Guild/Server ID (overrides `DISCORD_GUILD_ID`).
+- `-t, --token <token>`: Discord Bot Token (overrides `DISCORD_BOT_TOKEN`).
 - `-y, --yes`, `--force`: Bypasses the confirmation prompt.
+- `--include-emojis`: Synchronizes custom emojis if defined in the configuration file.
 
 ---
 
