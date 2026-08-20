@@ -10,7 +10,7 @@
   "scripts": {
     "start": "node ./bin/cli.js",
     "dev": "node ./bin/cli.js",
-    "test": "node --test tests/**/*.test.js",
+    "test": "node --test",
     "pull": "node ./bin/cli.js pull",
     "push": "node ./bin/cli.js push"
   },
