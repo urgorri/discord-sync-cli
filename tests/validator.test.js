@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { validateGuildId, validateJsonFile } from '../src/utils/validator.js';
+import { validateGuildId, validateJsonFile, normalizeBackupData } from '../src/utils/validator.js';
 
 describe('validateGuildId', () => {
   test('returns true for valid Discord snowflakes (17 to 20 digits)', () => {
@@ -69,5 +69,46 @@ describe('validateJsonFile', () => {
     if (tmpDir && fs.existsSync(tmpDir)) {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
+  });
+});
+
+describe('normalizeBackupData', () => {
+  test('normalizes string AFK channel to object with default timeout', () => {
+    const input = { afk: 'AFK Room' };
+    const normalized = normalizeBackupData(input);
+    assert.deepStrictEqual(normalized.afk, { name: 'AFK Room', timeout: 300 });
+  });
+
+  test('normalizes missing widget configuration to default structure', () => {
+    const input = {};
+    const normalized = normalizeBackupData(input);
+    assert.deepStrictEqual(normalized.widget, { enabled: false, channel: null });
+  });
+
+  test('ensures roles, bans, emojis, members, and channels arrays exist', () => {
+    const input = {};
+    const normalized = normalizeBackupData(input);
+    assert.deepStrictEqual(normalized.roles, []);
+    assert.deepStrictEqual(normalized.bans, []);
+    assert.deepStrictEqual(normalized.emojis, []);
+    assert.deepStrictEqual(normalized.members, []);
+    assert.deepStrictEqual(normalized.channels, { categories: [], others: [] });
+  });
+
+  test('sanitizes unsupported channel types to 0 (GuildText)', () => {
+    const input = {
+      channels: {
+        categories: [
+          {
+            name: 'Cat',
+            children: [{ name: 'forum', type: 15 }],
+          },
+        ],
+        others: [{ name: 'custom', type: null }],
+      },
+    };
+    const normalized = normalizeBackupData(input);
+    assert.strictEqual(normalized.channels.categories[0].children[0].type, 0);
+    assert.strictEqual(normalized.channels.others[0].type, 0);
   });
 });

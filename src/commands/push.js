@@ -1,10 +1,10 @@
 import path from 'node:path';
 import ora from 'ora';
-import discordBackup from 'discord-backup';
 import { confirm } from '@inquirer/prompts';
 import { getEnvConfig } from '../config/env.js';
 import { createDiscordClient, getGuild, closeClient } from '../utils/client.js';
-import { validateJsonFile } from '../utils/validator.js';
+import { validateJsonFile, normalizeBackupData } from '../utils/validator.js';
+import { restoreServerData } from '../services/syncEngine.js';
 import { logger } from '../utils/logger.js';
 
 /**
@@ -26,7 +26,8 @@ export async function pushCommand(options) {
 
     // 1. Validate JSON file before opening Discord connection
     logger.info(`Validating configuration file at ${filePath}...`);
-    const backupData = validateJsonFile(filePath);
+    const rawData = validateJsonFile(filePath);
+    const backupData = normalizeBackupData(rawData);
 
     // 2. Interactive confirmation if not bypassed
     const skipConfirmation = options.yes || options.force;
@@ -54,9 +55,8 @@ export async function pushCommand(options) {
 
     // 4. Apply backup to Guild
     spinner.text = `Applying server state to "${guild.name}" (destructive mode)...`;
-    await discordBackup.load(backupData, guild, {
+    await restoreServerData(guild, backupData, {
       clearGuildBeforeRestore: true,
-      maxMessagesPerChannel: 0,
     });
 
     spinner.succeed(`Successfully restored server structure to "${guild.name}".`);

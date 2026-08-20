@@ -1,9 +1,9 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import ora from 'ora';
-import discordBackup from 'discord-backup';
 import { getEnvConfig } from '../config/env.js';
 import { createDiscordClient, getGuild, closeClient } from '../utils/client.js';
+import { exportServerData } from '../services/syncEngine.js';
 import { logger } from '../utils/logger.js';
 
 /**
@@ -28,11 +28,7 @@ export async function pullCommand(options) {
     const guild = await getGuild(client, config.guildId);
 
     spinner.text = `Exporting backup data for guild "${guild.name}"...`;
-    const backupData = await discordBackup.create(guild, {
-      jsonSave: false,
-      maxMessagesPerChannel: 0,
-      saveImages: 'base64',
-    });
+    const backupData = await exportServerData(guild);
 
     spinner.text = `Writing server configuration to ${outputPath}...`;
     const jsonContent = JSON.stringify(backupData, null, 2);

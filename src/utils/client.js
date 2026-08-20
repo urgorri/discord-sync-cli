@@ -1,4 +1,4 @@
-import { Client, GatewayIntentBits } from 'discord.js';
+import { Client, GatewayIntentBits, Events } from 'discord.js';
 import { validateGuildId } from './validator.js';
 
 /**
@@ -19,12 +19,18 @@ export async function createDiscordClient(token) {
     ],
   });
 
-  await client.login(token);
+  await new Promise((resolve, reject) => {
+    if (client.isReady()) return resolve(client);
+    client.once(Events.ClientReady, () => resolve(client));
+    client.once(Events.Error, reject);
+    client.login(token).catch(reject);
+  });
+
   return client;
 }
 
 /**
- * Fetches a Guild by ID from the client instance.
+ * Fetches a Guild by ID from the client instance and populates its cache.
  * 
  * @param {Client} client - Logged-in Discord Client
  * @param {string} guildId - Discord Guild Snowflake ID
@@ -44,6 +50,14 @@ export async function getGuild(client, guildId) {
     if (!guild) {
       throw new Error(`Guild with ID ${guildId} was not found.`);
     }
+
+    // Ensure guild channels, roles, and bot member cache are fully fetched
+    await Promise.allSettled([
+      guild.channels.fetch(),
+      guild.roles.fetch(),
+      guild.members.fetchMe(),
+    ]);
+
     return guild;
   } catch (err) {
     if (err.code === 10004) {
