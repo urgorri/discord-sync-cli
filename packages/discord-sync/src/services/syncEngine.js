@@ -783,8 +783,9 @@ export async function restoreServerData(guild, backupData, options = {}) {
               // Ignore edit error
             }
 
-            if ((channel.type === ChannelType.GuildText || channel.type === ChannelType.GuildAnnouncement) && Array.isArray(childData.messages) && childData.messages.length > 0) {
-              await restoreChannelMessages(channel, childData.messages, {
+            const hasChildMessages = Array.isArray(childData.messages) && childData.messages.length > 0;
+            if ((channel.type === ChannelType.GuildText || channel.type === ChannelType.GuildAnnouncement) && (hasChildMessages || options.cleanMessages)) {
+              await restoreChannelMessages(channel, childData.messages || [], {
                 cleanMessages: Boolean(options.cleanMessages),
                 unpinPrevious: Boolean(options.unpinPrevious),
               });
@@ -849,8 +850,9 @@ export async function restoreServerData(guild, backupData, options = {}) {
           // Ignore edit error
         }
 
-        if ((channel.type === ChannelType.GuildText || channel.type === ChannelType.GuildAnnouncement) && Array.isArray(otherData.messages) && otherData.messages.length > 0) {
-          await restoreChannelMessages(channel, otherData.messages, {
+        const hasOtherMessages = Array.isArray(otherData.messages) && otherData.messages.length > 0;
+        if ((channel.type === ChannelType.GuildText || channel.type === ChannelType.GuildAnnouncement) && (hasOtherMessages || options.cleanMessages)) {
+          await restoreChannelMessages(channel, otherData.messages || [], {
             cleanMessages: Boolean(options.cleanMessages),
             unpinPrevious: Boolean(options.unpinPrevious),
           });

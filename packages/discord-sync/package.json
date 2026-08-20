@@ -1,6 +1,6 @@
 {
   "name": "discord-sync",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Declarative Discord server state engine to export, manage, and reconcile server structures programmatically.",
   "main": "./src/index.js",
   "type": "module",

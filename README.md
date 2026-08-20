@@ -191,24 +191,31 @@ Reads the local JSON file and reconciles/synchronizes the server structure on Di
 ```bash
 # 1. Preview changes before applying (Dry-Run mode - highly recommended)
 npm run dev -- push -d
+# or direct node invocation:
+node ./bin/cli.js push -d
 
 # 2. Interactive restore (prompts for confirmation before applying)
 npm run push
 
 # 3. Non-interactive force push (ideal for CI/CD or automation)
-npm run push -- -y
+npm run dev -- push -y
+# or:
+node ./bin/cli.js push -y
 
 # 4. Specify a custom configuration file and guild ID
-npm run dev -- push -f ./backups/community.json -g 123456789012345678 -y
+node ./bin/cli.js push -f ./backups/community.json -g 123456789012345678 -y
 
 # 5. Purge existing message histories before posting new messages
-npm run dev -- push -c -y
+node ./bin/cli.js push -c -y
 
 # 6. Unpin previous pinned messages when posting new pinned messages
-npm run dev -- push -u -y
+node ./bin/cli.js push -u -y
 
-# 7. Synchronize custom server emojis as well
-npm run dev -- push --include-emojis -y
+# 7. Purge messages + unpin previous + skip prompt in one command
+node ./bin/cli.js push -c -u -y
+
+# 8. Synchronize custom server emojis as well
+node ./bin/cli.js push --include-emojis -y
 ```
 
 **Options:**
