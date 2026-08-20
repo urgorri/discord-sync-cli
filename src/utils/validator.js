@@ -48,7 +48,7 @@ export function validateJsonFile(filePath) {
 }
 
 /**
- * Sanitizes and normalizes backup data to match the structure expected by discord-backup.
+ * Sanitizes and normalizes backup data to match the declarative sync schema.
  *
  * @param {object} raw - Parsed JSON backup data
  * @returns {object} Normalized backup data
