@@ -8,6 +8,13 @@ A lightweight, native CLI tool to export, manage, and synchronize Discord server
 
 Treat your Discord server structure as **Infrastructure as Code** (IaC).
 
+> [!CAUTION]
+> **⚠️ Intended Use & Safety Disclaimer:**
+> - This tool is primarily designed for **bootstrapping, provisioning, and setting up the baseline architecture** of fresh, unpopulated Discord servers, template instances, or staging environments.
+> - Running `push` synchronizes the server to match your `server.json`. Any channels or custom roles currently on the Discord server that are **NOT defined in your JSON file will be permanently deleted**.
+> - If you pass `-c / --clean-messages`, all existing message histories in the affected channels will be purged.
+> - **Always run with `-d` / `--dry-run` first** to preview planned diffs before applying changes to an active server with existing members!
+
 ---
 
 ## Table of Contents
@@ -179,30 +186,39 @@ npm run dev -- pull --include-emojis
 
 ### `push` — Apply Server Configuration
 
-Reads the local JSON file and recreates/synchronizes the server structure on Discord.
+Reads the local JSON file and reconciles/synchronizes the server structure on Discord.
 
 ```bash
-# Preview changes before applying (Dry-Run mode)
+# 1. Preview changes before applying (Dry-Run mode - highly recommended)
 npm run dev -- push -d
 
-# Interactive restore (asks for confirmation)
+# 2. Interactive restore (prompts for confirmation before applying)
 npm run push
 
-# Non-interactive force restore
+# 3. Non-interactive force push (ideal for CI/CD or automation)
 npm run push -- -y
 
-# Specify a custom file and guild override
-npm run dev -- push -f ./server.json.example -g 123456789012345678 --yes
+# 4. Specify a custom configuration file and guild ID
+npm run dev -- push -f ./backups/community.json -g 123456789012345678 -y
+
+# 5. Purge existing message histories before posting new messages
+npm run dev -- push -c -y
+
+# 6. Unpin previous pinned messages when posting new pinned messages
+npm run dev -- push -u -y
+
+# 7. Synchronize custom server emojis as well
+npm run dev -- push --include-emojis -y
 ```
 
 **Options:**
 - `-f, --file <path>`: Source configuration file (default: `./server.json` or `BACKUP_FILE`).
 - `-d, --dry-run`: Preview planned changes (created, updated, deleted roles & channels) without modifying Discord.
-- `-c, --clean-messages`: Purge all existing messages in channels before posting new ones (disabled by default; messages are sent as new messages).
-- `-u, --unpin-previous`: Unpin prior pinned messages in channels that have new pinned messages defined in configuration.
+- `-c, --clean-messages`, `--purge-messages`: Purge all existing messages in channels before posting new ones (disabled by default; messages are sent as new messages).
+- `-u, --unpin-previous`, `--clear-pins`: Unpin prior pinned messages in channels that have new pinned messages defined in configuration.
 - `-g, --guild <id>`: Target Discord Guild/Server ID (overrides `DISCORD_GUILD_ID`).
 - `-t, --token <token>`: Discord Bot Token (overrides `DISCORD_BOT_TOKEN`).
-- `-y, --yes`, `--force`: Bypasses the confirmation prompt.
+- `-y, --yes`, `--force`: Bypasses the interactive confirmation prompt.
 - `--include-emojis`: Synchronizes custom emojis if defined in the configuration file.
 
 ---
@@ -263,7 +279,7 @@ Run the native unit test suite:
 npm test
 ```
 
-All 24 unit tests execute in milliseconds with zero third-party testing bloat.
+All 33 unit tests execute in milliseconds with zero third-party testing bloat.
 
 ---
 
