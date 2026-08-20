@@ -1,0 +1,352 @@
+{
+  "name": "🚀 Example Community • Base Template",
+  "afk": {
+    "name": "💤 AFK Lounge",
+    "timeout": 300
+  },
+  "widget": {
+    "enabled": false,
+    "channel": null
+  },
+  "roles": [
+    {
+      "name": "@everyone",
+      "color": "#000000",
+      "hoist": false,
+      "permissions": "1071698529857",
+      "mentionable": false,
+      "position": 0,
+      "isEveryone": true
+    },
+    {
+      "name": "👥 Member",
+      "color": "#95a5a6",
+      "hoist": false,
+      "permissions": "1071698529857",
+      "mentionable": false,
+      "position": 1,
+      "isEveryone": false
+    },
+    {
+      "name": "⭐ VIP / Booster",
+      "color": "#f1c40f",
+      "hoist": true,
+      "permissions": "1071698529857",
+      "mentionable": false,
+      "position": 2,
+      "isEveryone": false
+    },
+    {
+      "name": "💻 Developer",
+      "color": "#3498db",
+      "hoist": true,
+      "permissions": "1071698529857",
+      "mentionable": true,
+      "position": 3,
+      "isEveryone": false
+    },
+    {
+      "name": "🛡️ Moderator",
+      "color": "#2ecc71",
+      "hoist": true,
+      "permissions": "1099511627775",
+      "mentionable": true,
+      "position": 4,
+      "isEveryone": false
+    },
+    {
+      "name": "👑 Administrator",
+      "color": "#e74c3c",
+      "hoist": true,
+      "permissions": "8",
+      "mentionable": true,
+      "position": 5,
+      "isEveryone": false
+    }
+  ],
+  "channels": {
+    "categories": [
+      {
+        "name": "📁 // 00 · INFORMATION",
+        "permissions": [
+          {
+            "roleName": "@everyone",
+            "allow": "1024",
+            "deny": "2048"
+          }
+        ],
+        "children": [
+          {
+            "type": 0,
+            "name": "welcome",
+            "nsfw": false,
+            "rateLimitPerUser": 0,
+            "parent": "📁 // 00 · INFORMATION",
+            "topic": "👋 Welcome to our community!",
+            "permissions": [
+              {
+                "roleName": "@everyone",
+                "allow": "1024",
+                "deny": "2048"
+              }
+            ],
+            "messages": [
+              {
+                "username": "🤖 Welcome Bot",
+                "avatar": "https://cdn.discordapp.com/embed/avatars/0.png",
+                "pinned": true,
+                "content": "👋 **Welcome to the server!**\n\nThis is an example server template managed with `discord-sync-cli`.\n\n**Getting Started:**\n> 1️⃣ Check out our <#0> channel to read the rules.\n> 2️⃣ Head over to general chat to say hello.\n> 3️⃣ Visit our support channel if you need technical assistance.\n\nEnjoy your stay! ✨\n\nhttps://dummyimage.com/1200x300/1e293b/38bdf8.png&text=WELCOME+TO+THE+SERVER",
+                "embeds": []
+              }
+            ],
+            "isNews": false,
+            "threads": []
+          },
+          {
+            "type": 0,
+            "name": "rules",
+            "nsfw": false,
+            "rateLimitPerUser": 0,
+            "parent": "📁 // 00 · INFORMATION",
+            "topic": "📜 Mandatory community guidelines and code of conduct",
+            "permissions": [
+              {
+                "roleName": "@everyone",
+                "allow": "1024",
+                "deny": "2048"
+              }
+            ],
+            "messages": [
+              {
+                "username": "🛡️ Community Safety",
+                "pinned": true,
+                "content": "📜 **COMMUNITY RULES**\n\nPlease follow these guidelines to keep our space welcoming and safe for everyone:\n\n> 1️⃣ 🤝 **Mutual Respect**: Zero tolerance for toxicity, insults, harassment, or hate speech.\n> 2️⃣ 🚫 **No Spam**: Do not send unsolicited advertising, mass mentions, or DM promotions.\n> 3️⃣ 🎯 **Keep Topics Relevant**: Keep discussions in their appropriate channels.\n> 4️⃣ ⚠️ **Security First**: Sharing malicious files, exploit payloads, or personal info is strictly prohibited.\n> 5️⃣ 🔞 **No NSFW Content**: Not permitted anywhere in public channels.\n\n👮 **Staff reserves the right to apply moderation actions in case of rule violations.**\n\nhttps://dummyimage.com/1200x300/0f172a/22c55e.png&text=SERVER+RULES",
+                "embeds": []
+              }
+            ],
+            "isNews": false,
+            "threads": []
+          },
+          {
+            "type": 5,
+            "name": "announcements",
+            "nsfw": false,
+            "rateLimitPerUser": 0,
+            "parent": "📁 // 00 · INFORMATION",
+            "topic": "📢 Official news, releases, and updates",
+            "permissions": [
+              {
+                "roleName": "@everyone",
+                "allow": "1024",
+                "deny": "2048"
+              },
+              {
+                "roleName": "👑 Administrator",
+                "allow": "2048",
+                "deny": "0"
+              }
+            ],
+            "messages": [
+              {
+                "username": "📣 Official Announcements",
+                "pinned": true,
+                "embeds": [
+                  {
+                    "title": "🎉 Official Server Launch!",
+                    "description": "We are thrilled to welcome you to our community.\n\nWe will use this channel to share key milestones, major news, and upcoming features.",
+                    "color": 3447003,
+                    "fields": [
+                      {
+                        "name": "🚀 Status",
+                        "value": "Server structure 100% operational and synced.",
+                        "inline": true
+                      },
+                      {
+                        "name": "🔔 Notifications",
+                        "value": "Enable notifications on this channel to stay up to date.",
+                        "inline": true
+                      }
+                    ],
+                    "footer": {
+                      "text": "Template configuration • discord-sync-cli"
+                    },
+                    "image": {
+                      "url": "https://dummyimage.com/1200x300/1e1b4b/818cf8.png&text=OFFICIAL+ANNOUNCEMENT"
+                    }
+                  }
+                ]
+              }
+            ],
+            "isNews": true,
+            "threads": []
+          }
+        ]
+      },
+      {
+        "name": "💬 // 01 · COMMUNITY",
+        "permissions": [],
+        "children": [
+          {
+            "type": 0,
+            "name": "general",
+            "nsfw": false,
+            "rateLimitPerUser": 0,
+            "parent": "💬 // 01 · COMMUNITY",
+            "topic": "💬 General discussions and friendly chat",
+            "permissions": [],
+            "messages": [],
+            "isNews": false,
+            "threads": []
+          },
+          {
+            "type": 0,
+            "name": "media-and-memes",
+            "nsfw": false,
+            "rateLimitPerUser": 5,
+            "parent": "💬 // 01 · COMMUNITY",
+            "topic": "📸 Share images, videos, artwork, and memes",
+            "permissions": [],
+            "messages": [],
+            "isNews": false,
+            "threads": []
+          },
+          {
+            "type": 0,
+            "name": "bot-commands",
+            "nsfw": false,
+            "rateLimitPerUser": 3,
+            "parent": "💬 // 01 · COMMUNITY",
+            "topic": "🤖 Dedicated channel for interactive bot commands",
+            "permissions": [],
+            "messages": [],
+            "isNews": false,
+            "threads": []
+          }
+        ]
+      },
+      {
+        "name": "💻 // 02 · DEVELOPMENT & SUPPORT",
+        "permissions": [],
+        "children": [
+          {
+            "type": 0,
+            "name": "dev-general",
+            "nsfw": false,
+            "rateLimitPerUser": 0,
+            "parent": "💻 // 02 · DEVELOPMENT & SUPPORT",
+            "topic": "💻 Software engineering, programming questions, and collaboration",
+            "permissions": [],
+            "messages": [],
+            "isNews": false,
+            "threads": []
+          },
+          {
+            "type": 0,
+            "name": "project-showcase",
+            "nsfw": false,
+            "rateLimitPerUser": 10,
+            "parent": "💻 // 02 · DEVELOPMENT & SUPPORT",
+            "topic": "🚀 Showcase your repositories, creations, and demos",
+            "permissions": [],
+            "messages": [],
+            "isNews": false,
+            "threads": []
+          },
+          {
+            "type": 0,
+            "name": "staff-lounge",
+            "nsfw": false,
+            "rateLimitPerUser": 0,
+            "parent": "💻 // 02 · DEVELOPMENT & SUPPORT",
+            "topic": "🔒 Private coordination area for moderators and admins",
+            "permissions": [
+              {
+                "roleName": "@everyone",
+                "allow": "0",
+                "deny": "1024"
+              },
+              {
+                "roleName": "🛡️ Moderator",
+                "allow": "3072",
+                "deny": "0"
+              },
+              {
+                "roleName": "👑 Administrator",
+                "allow": "3072",
+                "deny": "0"
+              }
+            ],
+            "messages": [],
+            "isNews": false,
+            "threads": []
+          }
+        ]
+      },
+      {
+        "name": "🔊 // 03 · VOICE CHANNELS",
+        "permissions": [],
+        "children": [
+          {
+            "type": 2,
+            "name": "🔊 General Voice",
+            "nsfw": false,
+            "rateLimitPerUser": 0,
+            "parent": "🔊 // 03 · VOICE CHANNELS",
+            "topic": null,
+            "permissions": [],
+            "messages": [],
+            "isNews": false,
+            "threads": []
+          },
+          {
+            "type": 2,
+            "name": "🎮 Gaming & Streaming",
+            "nsfw": false,
+            "rateLimitPerUser": 0,
+            "parent": "🔊 // 03 · VOICE CHANNELS",
+            "topic": null,
+            "permissions": [],
+            "messages": [],
+            "isNews": false,
+            "threads": []
+          },
+          {
+            "type": 2,
+            "name": "💤 AFK Lounge",
+            "nsfw": false,
+            "rateLimitPerUser": 0,
+            "parent": "🔊 // 03 · VOICE CHANNELS",
+            "topic": null,
+            "permissions": [],
+            "messages": [],
+            "isNews": false,
+            "threads": []
+          }
+        ]
+      }
+    ],
+    "others": [
+      {
+        "type": 0,
+        "name": "webhook-logs",
+        "nsfw": false,
+        "rateLimitPerUser": 0,
+        "parent": null,
+        "topic": "⚡ Root channel for automated webhooks and CI/CD event logs",
+        "permissions": [
+          {
+            "roleName": "@everyone",
+            "allow": "0",
+            "deny": "1024"
+          }
+        ],
+        "messages": [],
+        "isNews": false,
+        "threads": []
+      }
+    ]
+  },
+  "bans": [],
+  "emojis": [],
+  "members": []
+}
