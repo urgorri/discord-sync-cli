@@ -213,6 +213,63 @@ export async function clearGuild(guild) {
 }
 
 /**
+ * Restores predefined messages to a text-based channel.
+ *
+ * @param {import('discord.js').TextChannel|import('discord.js').NewsChannel} channel
+ * @param {Array<object>} messages
+ */
+export async function restoreChannelMessages(channel, messages) {
+  if (!Array.isArray(messages) || messages.length === 0) return;
+
+  for (const msg of messages) {
+    if (!msg || (!msg.content && (!Array.isArray(msg.embeds) || msg.embeds.length === 0))) {
+      continue;
+    }
+
+    try {
+      let sentMessage = null;
+
+      if (msg.username && msg.username !== channel.client.user.username) {
+        try {
+          const webhook = await channel.createWebhook({
+            name: msg.username.slice(0, 80) || 'SyncBot',
+            avatar: msg.avatar || undefined,
+          });
+
+          sentMessage = await webhook.send({
+            content: msg.content?.slice(0, 2000) || undefined,
+            embeds: Array.isArray(msg.embeds) ? msg.embeds.slice(0, 10) : [],
+            username: msg.username.slice(0, 80),
+            avatarURL: msg.avatar,
+          });
+
+          await webhook.delete().catch(() => {});
+        } catch {
+          // If webhook creation fails, fallback to direct channel message
+          sentMessage = await channel.send({
+            content: msg.content?.slice(0, 2000) || undefined,
+            embeds: Array.isArray(msg.embeds) ? msg.embeds.slice(0, 10) : [],
+          });
+        }
+      } else {
+        sentMessage = await channel.send({
+          content: msg.content?.slice(0, 2000) || undefined,
+          embeds: Array.isArray(msg.embeds) ? msg.embeds.slice(0, 10) : [],
+        });
+      }
+
+      if (msg.pinned && sentMessage?.pin) {
+        await sentMessage.pin().catch(() => {});
+      }
+
+      await delay(250);
+    } catch {
+      // Continue if a single message fails to post
+    }
+  }
+}
+
+/**
  * Restores a server backup state to a remote Discord guild.
  *
  * @param {import('discord.js').Guild} guild
@@ -321,7 +378,13 @@ export async function restoreServerData(guild, backupData, options = {}) {
               if (childData.rateLimitPerUser) channelOptions.rateLimitPerUser = childData.rateLimitPerUser;
             }
 
-            await guild.channels.create(channelOptions);
+            const createdChannel = await guild.channels.create(channelOptions);
+            
+            // Restore messages if present
+            if ((chType === ChannelType.GuildText || chType === ChannelType.GuildAnnouncement) && Array.isArray(childData.messages) && childData.messages.length > 0) {
+              await restoreChannelMessages(createdChannel, childData.messages);
+            }
+
             await delay(150);
           } catch {
             // Continue with other channels
@@ -348,7 +411,13 @@ export async function restoreServerData(guild, backupData, options = {}) {
           if (otherData.rateLimitPerUser) channelOptions.rateLimitPerUser = otherData.rateLimitPerUser;
         }
 
-        await guild.channels.create(channelOptions);
+        const createdChannel = await guild.channels.create(channelOptions);
+
+        // Restore messages if present
+        if ((chType === ChannelType.GuildText || chType === ChannelType.GuildAnnouncement) && Array.isArray(otherData.messages) && otherData.messages.length > 0) {
+          await restoreChannelMessages(createdChannel, otherData.messages);
+        }
+
         await delay(150);
       } catch {
         // Continue with next channel

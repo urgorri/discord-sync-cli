@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { extractChannelPermissions, resolvePermissions } from '../src/services/syncEngine.js';
+import { extractChannelPermissions, resolvePermissions, restoreChannelMessages } from '../src/services/syncEngine.js';
 
 describe('syncEngine - extractChannelPermissions', () => {
   test('returns empty array when channel has no permissionOverwrites cache', () => {
@@ -75,5 +75,54 @@ describe('syncEngine - resolvePermissions', () => {
     const guild = { roles: { cache: [] } };
     assert.deepStrictEqual(resolvePermissions(null, guild), []);
     assert.deepStrictEqual(resolvePermissions([], guild), []);
+  });
+});
+
+describe('syncEngine - restoreChannelMessages', () => {
+  test('sends message directly when author is bot user', async () => {
+    const sentMessages = [];
+    const channel = {
+      client: { user: { username: 'MyBot' } },
+      send: async (payload) => {
+        sentMessages.push(payload);
+        return { id: 'msg_1' };
+      },
+    };
+
+    const messages = [
+      { username: 'MyBot', content: 'Hello World' },
+    ];
+
+    await restoreChannelMessages(channel, messages);
+    assert.strictEqual(sentMessages.length, 1);
+    assert.strictEqual(sentMessages[0].content, 'Hello World');
+  });
+
+  test('creates and uses webhook when username differs from bot', async () => {
+    const webhookMessages = [];
+    let webhookDeleted = false;
+
+    const channel = {
+      client: { user: { username: 'MyBot' } },
+      createWebhook: async (options) => ({
+        send: async (payload) => {
+          webhookMessages.push({ ...payload, webhookName: options.name });
+          return { id: 'msg_webhook' };
+        },
+        delete: async () => {
+          webhookDeleted = true;
+        },
+      }),
+    };
+
+    const messages = [
+      { username: 'Reglas', content: '📜 Reglas del servidor' },
+    ];
+
+    await restoreChannelMessages(channel, messages);
+    assert.strictEqual(webhookMessages.length, 1);
+    assert.strictEqual(webhookMessages[0].content, '📜 Reglas del servidor');
+    assert.strictEqual(webhookMessages[0].webhookName, 'Reglas');
+    assert.strictEqual(webhookDeleted, true);
   });
 });
